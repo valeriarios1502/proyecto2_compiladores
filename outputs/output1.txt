@@ -1,0 +1,4 @@
+=== STDOUT ===
+Parseo exitoso
+
+=== STDERR ===

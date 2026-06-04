@@ -1,0 +1,61 @@
+struct Nodo {
+    valor: i32;
+    siguiente: *Nodo;
+}
+
+var global: ?i32 = null;
+
+pub fn dividir(a: i32, b: i32) !i32 {
+    if (b == 0) then {
+        return null;
+    }
+    return a / b;
+}
+
+pub fn procesar(n: i32) void {
+    switch (n) {
+        0 => {
+            print(0);
+        },
+        1 => {
+            print(1);
+        },
+        else => {
+            print(99);
+        },
+    }
+}
+
+pub fn main() void {
+    var p: *Nodo = new Nodo;
+    defer delete p;
+
+    var a: i32 = 10;
+    var b: i32 = 2;
+
+    try dividir(a, b) catch |err| {
+        print(0);
+    }
+
+    var opcional: ?i32 = null;
+    opcional = 42;
+
+    if (opcional == null) then {
+        print(0);
+    } else then {
+        print(opcional);
+    }
+
+    var sumar: i32 = 0;
+    sumar = fn(x: i32, y: i32): i32 {
+        return x + y;
+    };
+
+    procesar(1);
+    procesar(0);
+    procesar(5);
+
+    var undef: i32 = undefined;
+    var ref: *i32 = &a;
+    print(ref);
+}

@@ -1,0 +1,41 @@
+struct Punto {
+    x: i32;
+    y: i32;
+}
+
+var contador: i32 = 0;
+const MAX: i32 = 100;
+
+pub fn suma(a: i32, b: i32) i32 {
+    return a + b;
+}
+
+pub fn main() void {
+    var x: i32 = 10;
+    var y: i32 = 20;
+    var resultado: i32 = 0;
+
+    resultado = suma(x, y);
+    print(resultado);
+
+    if (resultado > 15) then {
+        print(resultado);
+    } else then {
+        print(0);
+    }
+
+    var i: i32 = 0;
+    while (i < 10) {
+        print(i);
+        i = i + 1;
+    }
+
+    for (i = 0; i < 5; i = i + 1) {
+        print(i);
+    }
+
+    var hex: i32 = 0xFF;
+    var bin: i32 = 0b1010;
+    print(hex);
+    print(bin);
+}
