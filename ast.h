@@ -38,7 +38,7 @@ enum BinaryOp {
 
 class Exp {
 public:
-    virtual int accept(Visitor* visitor) = 0;
+    virtual Value accept(Visitor* visitor) = 0;
     virtual ~Exp() = 0;
     static string binopToChar(BinaryOp op);
 };
@@ -48,7 +48,7 @@ public:
     Exp* left;
     Exp* right;
     BinaryOp op;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     BinaryExp(Exp* l, Exp* r, BinaryOp op);
     ~BinaryExp();
 };
@@ -56,7 +56,7 @@ public:
 class NumberExpDecimal : public Exp {
 public:
     int value;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     NumberExpDecimal(int v);
     ~NumberExpDecimal();
 };
@@ -64,7 +64,7 @@ public:
 class NumberExpFlotante : public Exp {
 public:
     float value;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     NumberExpFlotante(float v);
     ~NumberExpFlotante();
 };
@@ -72,7 +72,7 @@ public:
 class StringExp : public Exp {
 public:
     string valor;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     StringExp(string v);
     ~StringExp();
 };
@@ -80,7 +80,7 @@ public:
 class CharExp : public Exp {
 public:
     char valor;
-    int accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
     CharExp(char v);
     ~CharExp();
 };
@@ -88,7 +88,7 @@ public:
 class IdExp : public Exp {
 public:
     string value;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     IdExp(string v);
     ~IdExp();
 };
@@ -96,7 +96,7 @@ public:
 class BoolExp : public Exp {
 public:
     string booleano;
-    int accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
     BoolExp();
     ~BoolExp();
 };
@@ -104,7 +104,7 @@ public:
 class NotExp : public Exp {
 public:
     Exp* exp;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     NotExp();
     ~NotExp();
 };
@@ -113,7 +113,7 @@ class FcallExp : public Exp {
 public:
     string nombre;
     vector<Exp*> argumentos;
-    int accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
     FcallExp();
     ~FcallExp();
 };
@@ -122,7 +122,7 @@ class UnaryExp : public Exp {
 public:
     enum Op { NEGATE, ADDRESS, DEREF, NOT_OP } op;
     Exp* exp;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     UnaryExp(Op op, Exp* exp);
     ~UnaryExp();
 };
@@ -130,21 +130,21 @@ public:
 class NewExp : public Exp {
 public:
     Type* tipo;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     NewExp(Type* tipo);
     ~NewExp();
 };
 
 class NullExp : public Exp {
 public:
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     NullExp();
     ~NullExp();
 };
 
 class UndefinedExp : public Exp {
 public:
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     UndefinedExp();
     ~UndefinedExp();
 };
@@ -152,7 +152,7 @@ public:
 class ReferenceExp : public Exp {
 public:
     Exp* exp;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     ReferenceExp();
     ~ReferenceExp();
 };
@@ -160,7 +160,7 @@ public:
 class PunteroExp : public Exp {
 public:
     Exp* exp;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     PunteroExp();
     ~PunteroExp();
 };
@@ -169,7 +169,7 @@ class AlgoconcorchetesylistaExp : public Exp {
 public:
     Exp* nombre;
     vector<Exp*> argumentos;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     AlgoconcorchetesylistaExp(Exp* nombre, vector<Exp*> argumentos);
     ~AlgoconcorchetesylistaExp();
 };
@@ -178,7 +178,7 @@ class AlgoconcorchetesExp : public Exp {
 public:
     Exp* nombre;
     Exp* dentroexp;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     AlgoconcorchetesExp(Exp* nombre, Exp* dentroexp);
     ~AlgoconcorchetesExp();
 };
@@ -187,7 +187,7 @@ class PuntoExp : public Exp {
 public:
     Exp* exp;
     string id;
-    int accept(Visitor* visitor);
+    Value accept(Visitor* visitor);
     PuntoExp(Exp* exp, string id);
     ~PuntoExp();
 };
@@ -199,7 +199,7 @@ public:
     vector<string> id_parametros;
     vector<Type*> tipo_parametros;
     bool hayparametros;
-    int accept(Visitor* visitor);   // era void en ast.h → corregido (hereda Exp)
+    Value accept(Visitor* visitor);   // era void en ast.h → corregido (hereda Exp)
     LambdaExp(Type* tipo, Body* cuerpo, vector<string> id_parametros, vector<Type*> tipo_parametros);
     ~LambdaExp();
 };
@@ -490,6 +490,76 @@ public:
     void accept(Visitor* visitor);
     ~Programa();
     Programa();
+};
+
+struct Value {
+    enum Kind { VAL_INT, VAL_FLOAT, VAL_BOOL, VAL_VOID, VAL_STRING, VAL_CHAR } kind;
+    int i;
+    double f;
+    bool b;
+    string s;
+    char c;
+
+    Value() : kind(VAL_VOID), i(0), f(0.0), b(false) {}
+
+    static Value makeInt(int v) {
+        Value val;
+        val.kind = VAL_INT;
+        val.i = v;
+        return val;
+    }
+
+    static Value makeFloat(double v) {
+        Value val;
+        val.kind = VAL_FLOAT;
+        val.f = v;
+        return val;
+    }
+
+    static Value makeBool(bool v) {
+        Value val;
+        val.kind = VAL_BOOL;
+        val.b = v;
+        return val;
+    }
+
+    static Value makeString(const string& v) {
+        Value val;
+        val.kind = VAL_STRING;
+        val.s = v;
+        return val;
+    }
+    
+    static Value makeChar(char v) {
+        Value val;
+        val.kind = VAL_CHAR;
+        val.c = v;
+        return val;
+    }
+
+    bool isNumeric() const {
+        return kind == VAL_INT || kind == VAL_FLOAT;
+    }
+
+    bool isBool() const {
+        return kind == VAL_BOOL;
+    }
+
+    string toString() const {
+        switch (kind) {
+            case VAL_INT: return to_string(i);
+            case VAL_FLOAT: {
+                string s = to_string(f);
+                if (s.find('.') != string::npos) {
+                    while (!s.empty() && s.back() == '0') s.pop_back();
+                    if (!s.empty() && s.back() == '.') s.pop_back();
+                }
+                return s;
+            }
+            case VAL_BOOL: return b ? "true" : "false";
+            default: return "void";
+        }
+    }
 };
 
 #endif // AST_H
