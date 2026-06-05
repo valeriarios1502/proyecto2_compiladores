@@ -12,4 +12,5 @@ add_executable(Proyecto2
         token.h
         main.cpp
         ast.cpp
-        parser.cpp)
+        parser.cpp
+        visitor.cpp)

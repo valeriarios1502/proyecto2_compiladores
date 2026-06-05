@@ -96,7 +96,7 @@ Programa* Parser::parseP() {
             // Lo guardamos como un BodyStmt dentro de una Fundec "comptime"
             Fundec* f = new Fundec();
             f->nombre = "__comptime__";
-            f->tipo   = new IdType("void");
+            f->tipo = new IdType("void");
             f->cuerpo = b;
             p->declist.push_back(f);
         } else {
@@ -132,7 +132,7 @@ Top_dec* Parser::parseFnOrTemplate() {
         parseParamList(t->id_parametros, t->tipo_parametros);
         expect(Token::RPAREN, "Se esperaba ')' en template");
         expect(Token::DOSPUNTOS, "Se esperaba ':' en template");
-        t->tipo  = parseType();
+        t->tipo = parseType();
         t->block = parseBody();
         return t;
     } else {
@@ -143,7 +143,7 @@ Top_dec* Parser::parseFnOrTemplate() {
         expect(Token::LPAREN, "Se esperaba '(' en fn");
         parseParamList(f->id_parametros, f->tipo_parametros);
         expect(Token::RPAREN, "Se esperaba ')'");
-        f->tipo   = parseType();
+        f->tipo = parseType();
         f->cuerpo = parseBody();
         return f;
     }
@@ -253,10 +253,10 @@ Top_dec* Parser::parseUnion_dec() {
 
     // Lo envolvemos en una VarDec cuyo tipo es el UnionType
     VarDec* vd = new VarDec();
-    vd->nombre    = nombre;
-    vd->tipo      = ut;
+    vd->nombre = nombre;
+    vd->tipo = ut;
     vd->tienetipo = true;
-    vd->exp       = nullptr;
+    vd->exp = nullptr;
     return vd;
 }
 
@@ -274,7 +274,7 @@ Top_dec* Parser::parsefn_dec() {
     expect(Token::LPAREN, "Se esperaba '('");
     parseParamList(f->id_parametros, f->tipo_parametros);
     expect(Token::RPAREN, "Se esperaba ')'");
-    f->tipo   = parseType();
+    f->tipo = parseType();
     f->cuerpo = parseBody();
     return f;
 }
@@ -333,7 +333,8 @@ Stmt* Parser::parseStmt() {
         // Se devuelve como BodyStmt con cuerpo vacío y la var colgada;
         // La forma más limpia es reutilizar AsignStmt:
         AsignStmt* a = new AsignStmt(vd->nombre, vd->exp);
-        delete vd;   // liberamos el wrapper
+        vd->exp = nullptr;
+        delete vd; // liberamos el wrapper
         return a;
     }
 
@@ -342,6 +343,7 @@ Stmt* Parser::parseStmt() {
         ConstDec* cd = (ConstDec*)parseConts_dec();
         match(Token::SEMICOL);
         AsignStmt* a = new AsignStmt(cd->nombre, cd->exp);
+        cd->exp = nullptr;
         delete cd;
         return a;
     }
@@ -355,7 +357,7 @@ Stmt* Parser::parseStmt() {
         Body* if_cuerpo = parseBody();
 
         if (match(Token::ELSE)) {
-            match(Token::THEN);   // 'else then' según la gramática
+            match(Token::THEN); // 'else then' según la gramática
             Body* else_cuerpo = parseBody();
             return new IfStmt(condicion, if_cuerpo, else_cuerpo, true);
         }
@@ -378,10 +380,10 @@ Stmt* Parser::parseStmt() {
     // --- for ---
     if (match(Token::FOR)) {
         expect(Token::LPAREN, "Se esperaba '(' en for");
-        Stmt* asignacion = parseStmt();          // assign-stmt (incluye ';')
-        Exp*  condicion  = parseLogicExp();
+        Stmt* asignacion = parseStmt(); // assign-stmt (incluye ';')
+        Exp* condicion = parseLogicExp();
         expect(Token::SEMICOL, "Se esperaba ';' en for");
-        Stmt* incremento = parseStmt();          // assign-stmt (incluye ';')
+        Stmt* incremento = parseStmt(); // assign-stmt (incluye ';')
         expect(Token::RPAREN, "Se esperaba ')' en for");
         Body* cuerpo = parseBody();
         return new ForStmt(asignacion, condicion, incremento, cuerpo);
@@ -389,7 +391,8 @@ Stmt* Parser::parseStmt() {
 
     // --- return ---
     if (match(Token::RETURN)) {
-        if (!check(Token::SEMICOL)) {
+        if (!check(Token::SEMICOL))
+        {
             Exp* exp = parseLogicExp();
             match(Token::SEMICOL);
             return new ReturnStm(exp);
@@ -417,7 +420,8 @@ Stmt* Parser::parseStmt() {
     // --- break ---
     if (match(Token::BREAK)) {
         // break : <ident> <expr> ;  (break con valor, extensión Zig)
-        if (match(Token::DOSPUNTOS)) {
+        if (match(Token::DOSPUNTOS))
+        {
             expect(Token::ID, "Se esperaba label en break");
             // Ignoramos el label por ahora, parseamos el valor
             Exp* valor = parseLogicExp();
@@ -459,13 +463,13 @@ Stmt* Parser::parseStmt() {
                 // else => { <block> }
                 // '=>' se escanea como ASSIGN ('=') + MAYOR ('>')  por separado
                 expect(Token::ASSIGN, "Se esperaba '=' de '=>' en case else");
-                expect(Token::MAYOR,  "Se esperaba '>' de '=>' en case else");
+                expect(Token::MAYOR, "Se esperaba '>' de '=>' en case else");
                 sw->default_caso = parseBody();
             } else {
                 // <switch-pattern> => <block> ,
                 Exp* patron = parseLogicExp();
                 expect(Token::ASSIGN, "Se esperaba '=' de '=>' en case");
-                expect(Token::MAYOR,  "Se esperaba '>' de '=>' en case");
+                expect(Token::MAYOR, "Se esperaba '>' de '=>' en case");
                 Body* caso_body = parseBody();
                 sw->casos.push_back({patron, caso_body});
             }
@@ -479,9 +483,9 @@ Stmt* Parser::parseStmt() {
     // Sintaxis: try <expr> catch |<ident>| { <block> }
     // No hay ';' entre expr y catch; ';' solo si no hay catch.
     if (match(Token::TRY)) {
-        Exp* expr = parseLogicExp();  // incluye llamadas f(a,b) via parsePostfix
+        Exp* expr = parseLogicExp(); // incluye llamadas f(a,b) via parsePostfix
 
-        Body* try_body   = nullptr;
+        Body* try_body = nullptr;
         Body* catch_body = nullptr;
         string error_var;
 
@@ -492,11 +496,12 @@ Stmt* Parser::parseStmt() {
             // si no está mapeado. Intentamos consumir el id directamente:
             if (match(Token::PIPE)) {
                 // '|' escaneado como PIPE (ver parche en scanner + token.h)
-                if (check(Token::ID)) {
+                if (check(Token::ID))
+                {
                     match(Token::ID);
                     error_var = previous->text;
                 }
-                match(Token::PIPE);        // cierre '|'
+                match(Token::PIPE); // cierre '|'
             } else if (check(Token::ID)) {
                 // fallback: catch sin delimitadores
                 match(Token::ID);
@@ -504,7 +509,7 @@ Stmt* Parser::parseStmt() {
             }
             catch_body = parseBody();
         } else {
-            match(Token::SEMICOL);  // try sin catch termina en ';'
+            match(Token::SEMICOL); // try sin catch termina en ';'
         }
         return new TryStmt(expr, try_body, catch_body, error_var);
     }
@@ -520,9 +525,9 @@ Stmt* Parser::parseStmt() {
     // Si el token es ID y el siguiente es DOSPUNTOS → labeled block
     if (check(Token::ID)) {
         // Miramos sin consumir: guardamos estado
-        Token* saved_current  = current;
+        Token* saved_current = current;
         // Consumimos el ID temporalmente
-        advance();                      // ID consumido
+        advance(); // ID consumido
         string nombre = previous->text;
 
         if (match(Token::DOSPUNTOS)) {
@@ -584,7 +589,7 @@ Type* Parser::parseType() {
         return new ErrorType(inner);
     }
 
-    // * <type>  →  pointer
+    //*  <type>  →  pointer
     if (match(Token::STAR)) {
         Type* inner = parseType();
         return new PointerType(inner);
@@ -633,7 +638,7 @@ Type* Parser::parseType() {
         if (match(Token::NOT)) {
             // Es error-union: <ident>!<type>
             Type* inner = parseType();
-            return new ErrorType(inner);  // ErrorType guarda el tipo ok; el nombre se pierde
+            return new ErrorType(inner); // ErrorType guarda el tipo ok; el nombre se pierde
         }
         return new IdType(id);
     }
@@ -657,7 +662,7 @@ Exp* Parser::parseExpr() {
         return f;
     }
     if (match(Token::COMPTIME)) {
-        return parseLogicExp();  // comptime expr se evalúa igual
+        return parseLogicExp(); // comptime expr se evalúa igual
     }
     return parseLogicExp();
 }
@@ -677,16 +682,16 @@ Exp* Parser::parseLogicExp() {
 Exp* Parser::parseCompareExp() {
     Exp* l = parseAddExp();
     while (check(Token::IGUALIGUAL) || check(Token::DIFERENTE) ||
-           check(Token::MAYOR)      || check(Token::MAYORIGUAL) ||
-           check(Token::MENOR)      || check(Token::MENORIGUAL)) {
+           check(Token::MAYOR) || check(Token::MAYORIGUAL) ||
+           check(Token::MENOR) || check(Token::MENORIGUAL)) {
 
         BinaryOp op;
-        if      (match(Token::IGUALIGUAL))  op = IGUALIGUAL;
-        else if (match(Token::DIFERENTE))   op = DIFERENTE_OP;
-        else if (match(Token::MAYOR))       op = MAYOR;
-        else if (match(Token::MAYORIGUAL))  op = MAYORI;
-        else if (match(Token::MENOR))       op = MENOR;
-        else { match(Token::MENORIGUAL);    op = MENORI; }
+        if (match(Token::IGUALIGUAL)) op = IGUALIGUAL;
+        else if (match(Token::DIFERENTE)) op = DIFERENTE_OP;
+        else if (match(Token::MAYOR)) op = MAYOR;
+        else if (match(Token::MAYORIGUAL)) op = MAYORI;
+        else if (match(Token::MENOR)) op = MENOR;
+        else { match(Token::MENORIGUAL); op = MENORI; }
 
         Exp* r = parseAddExp();
         l = new BinaryExp(l, r, op);
@@ -705,21 +710,26 @@ Exp* Parser::parseAddExp() {
     return l;
 }
 
-// <mul-expr> ::= <unary-expr> { * | / | % <unary-expr> }*
+// <mul-expr> ::= <unary-expr> {*  | / | % <unary-expr> }*
 Exp* Parser::parseMulExp() {
     Exp* l = parseUnaryExp();
     while (check(Token::STAR) || check(Token::DIV) || check(Token::MODULO)) {
         BinaryOp op;
-        if      (match(Token::STAR))   op = MUL_OP;
-        else if (match(Token::DIV))    op = DIV_OP;
-        else { match(Token::MODULO);   op = MODULO_OP; }
+        if (match(Token::STAR))
+            op = MUL_OP;
+        else if (match(Token::DIV))
+            op = DIV_OP;
+        else {
+            match(Token::MODULO);
+            op = MODULO_OP;
+        }
         Exp* r = parseUnaryExp();
         l = new BinaryExp(l, r, op);
     }
     return l;
 }
 
-// <unary-expr> ::= { ! | & | * } <postfix-expr>
+// <unary-expr> ::= { ! | & |*  } <postfix-expr>
 Exp* Parser::parseUnaryExp() {
     if (match(Token::NOT)) {
         Exp* e = parsePostfix();
@@ -750,7 +760,7 @@ Exp* Parser::parsePostfix() {
             Exp* first_arg = parseLogicExp();
             if (match(Token::COMA)) {
                 // arg-list
-                vector<Exp*> args;
+                vector<Exp* > args;
                 args.push_back(first_arg);
                 args.push_back(parseLogicExp());
                 while (match(Token::COMA))
@@ -782,11 +792,10 @@ Exp* Parser::parsePostfix() {
             Exp* fallback = parseLogicExp();
             // Representamos orelse como BinaryExp con op OR
             e = new BinaryExp(e, fallback, OR);
-        } else if (match(Token::LPAREN)) {
-            // Llamada a función: f(args)
+        } else if (match(Token::LPAREN)) {            // Llamada a función: f(args)
             FcallExp* call = new FcallExp();
             // Extraemos el nombre si e es IdExp
-            if (IdExp* id = dynamic_cast<IdExp*>(e)) {
+            if (IdExp* id = dynamic_cast<IdExp* >(e)) {
                 call->nombre = id->value;
                 delete e;
             } else {
@@ -834,16 +843,16 @@ Exp* Parser::parsePrimaryExp() {
         return b;
     }
 
-    // Números
+    // Números if (match(Token::NUMDECIMAL))
     if (match(Token::NUMDECIMAL)) {
         return new NumberExpDecimal(stoi(previous->text));
-    }
+    } 
     if (match(Token::NUMFLOTANTE)) {
         return new NumberExpFlotante(stof(previous->text));
     }
     if (match(Token::NUMHEX)) {
         return new NumberExpDecimal((int)stoul(previous->text, nullptr, 16));
-    }
+    } 
     if (match(Token::NUMBIN)) {
         string s = previous->text.substr(2); // quitar 0b
         return new NumberExpDecimal((int)stoul(s, nullptr, 2));
@@ -870,11 +879,11 @@ Exp* Parser::parsePrimaryExp() {
     if (match(Token::FN)) {
         expect(Token::LPAREN, "Se esperaba '(' en lambda");
         vector<string> ids;
-        vector<Type*>  tipos;
+        vector<Type*> tipos;
         parseParamList(ids, tipos);
         expect(Token::RPAREN, "Se esperaba ')' en lambda");
         expect(Token::DOSPUNTOS, "Se esperaba ':' en lambda");
-        Type* ret  = parseType();
+        Type* ret = parseType();
         Body* body = parseBody();
         return new LambdaExp(ret, body, ids, tipos);
     }

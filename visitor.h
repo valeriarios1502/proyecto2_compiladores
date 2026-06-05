@@ -114,13 +114,14 @@ public:
     virtual void visit(Programa* p) = 0;
 };
 
-
 class EVALVisitor : public Visitor {
 public:
     Environment<Value> env;
     unordered_map<string, Fundec*> envfun;
     Value retval;
     bool retcall = false;
+    bool breakcall = false;
+    bool continuecall = false;
 
     // Exp
     Value visit(BinaryExp* exp) override;

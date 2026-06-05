@@ -6,13 +6,115 @@
 #include <list>
 #include <ostream>
 #include <vector>
+#include <utility>
 
 using namespace std;
 
-class Visitor; 
+class Visitor;
 class Body;
 class VarDec;
 class Type;
+
+struct Value {
+    enum Kind { VAL_INT, VAL_FLOAT, VAL_BOOL, VAL_VOID, VAL_STRING, VAL_CHAR, VAL_NULL, VAL_UNDEFINED } kind;
+
+    int i;
+    double f;
+    bool b;
+    string s;
+    char c;
+
+    Value() : kind(VAL_VOID), i(0), f(0.0), b(false), c('\0') {}
+
+    static Value makeInt(int v) {
+        Value val;
+        val.kind = VAL_INT;
+        val.i = v;
+        return val;
+    }
+
+    static Value makeFloat(double v) {
+        Value val;
+        val.kind = VAL_FLOAT;
+        val.f = v;
+        return val;
+    }
+
+    static Value makeBool(bool v) {
+        Value val;
+        val.kind = VAL_BOOL;
+        val.b = v;
+        return val;
+    }
+
+    static Value makeString(const string &v) {
+        Value val;
+        val.kind = VAL_STRING;
+        val.s = v;
+        return val;
+    }
+
+    static Value makeChar(char v) {
+        Value val;
+        val.kind = VAL_CHAR;
+        val.c = v;
+        return val;
+    }
+
+    static Value makeNull() {
+        Value val;
+        val.kind = VAL_NULL;
+        return val;
+    }
+
+    static Value makeUndefined() {
+        Value val;
+        val.kind = VAL_UNDEFINED;
+        return val;
+    }
+
+    bool isNumeric() const {
+        return kind == VAL_INT || kind == VAL_FLOAT;
+    }
+
+    bool isBool() const {
+        return kind == VAL_BOOL;
+    }
+
+    double asNumber() const {
+        return kind == VAL_FLOAT ? f : i;
+    }
+
+    string toString() const {
+        switch (kind) {
+        case VAL_INT:
+            return to_string(i);
+        case VAL_FLOAT: {
+            string text = to_string(f);
+            if (text.find('.') != string::npos) {
+                while (!text.empty() && text.back() == '0')
+                    text.pop_back();
+                if (!text.empty() && text.back() == '.')
+                    text.pop_back();
+            }
+            return text;
+        }
+        case VAL_BOOL:
+            return b ? "true" : "false";
+        case VAL_STRING:
+            return s;
+        case VAL_CHAR:
+            return string(1, c);
+        case VAL_NULL:
+            return "null";
+        case VAL_UNDEFINED:
+            return "undefined";
+        case VAL_VOID:
+            return "void";
+        }
+        return "void";
+    }
+};
 
 // Operadores binarios soportados
 enum BinaryOp { 
@@ -34,7 +136,7 @@ enum BinaryOp {
 };
 
 // ==================== Exp ====================
-// Todas las subclases de Exp deben retornar int en accept()
+// Todas las subclases de Exp deben retornar Value en accept()
 
 class Exp {
 public:
@@ -80,7 +182,7 @@ public:
 class CharExp : public Exp {
 public:
     char valor;
-    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);
     CharExp(char v);
     ~CharExp();
 };
@@ -96,7 +198,7 @@ public:
 class BoolExp : public Exp {
 public:
     string booleano;
-    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);
     BoolExp();
     ~BoolExp();
 };
@@ -113,7 +215,7 @@ class FcallExp : public Exp {
 public:
     string nombre;
     vector<Exp*> argumentos;
-    Value accept(Visitor* visitor);   // era void en ast.cpp → corregido
+    Value accept(Visitor* visitor);
     FcallExp();
     ~FcallExp();
 };
@@ -199,11 +301,10 @@ public:
     vector<string> id_parametros;
     vector<Type*> tipo_parametros;
     bool hayparametros;
-    Value accept(Visitor* visitor);   // era void en ast.h → corregido (hereda Exp)
+    Value accept(Visitor* visitor);
     LambdaExp(Type* tipo, Body* cuerpo, vector<string> id_parametros, vector<Type*> tipo_parametros);
     ~LambdaExp();
 };
-
 
 // ==================== Stmt ====================
 // Todas las subclases de Stmt deben retornar void en accept()
@@ -334,7 +435,6 @@ public:
     ~ForStmt();
 };
 
-
 // ==================== Top_dec ====================
 // Todas las subclases de Top_dec deben retornar void en accept()
 
@@ -400,7 +500,6 @@ public:
     Template();
     ~Template();
 };
-
 
 // ==================== Type ====================
 // Todas las subclases de Type deben retornar void en accept()
@@ -473,7 +572,6 @@ public:
     ~EnumType();
 };
 
-
 // ==================== Body / Programa ====================
 
 class Body {
@@ -490,76 +588,6 @@ public:
     void accept(Visitor* visitor);
     ~Programa();
     Programa();
-};
-
-struct Value {
-    enum Kind { VAL_INT, VAL_FLOAT, VAL_BOOL, VAL_VOID, VAL_STRING, VAL_CHAR } kind;
-    int i;
-    double f;
-    bool b;
-    string s;
-    char c;
-
-    Value() : kind(VAL_VOID), i(0), f(0.0), b(false) {}
-
-    static Value makeInt(int v) {
-        Value val;
-        val.kind = VAL_INT;
-        val.i = v;
-        return val;
-    }
-
-    static Value makeFloat(double v) {
-        Value val;
-        val.kind = VAL_FLOAT;
-        val.f = v;
-        return val;
-    }
-
-    static Value makeBool(bool v) {
-        Value val;
-        val.kind = VAL_BOOL;
-        val.b = v;
-        return val;
-    }
-
-    static Value makeString(const string& v) {
-        Value val;
-        val.kind = VAL_STRING;
-        val.s = v;
-        return val;
-    }
-    
-    static Value makeChar(char v) {
-        Value val;
-        val.kind = VAL_CHAR;
-        val.c = v;
-        return val;
-    }
-
-    bool isNumeric() const {
-        return kind == VAL_INT || kind == VAL_FLOAT;
-    }
-
-    bool isBool() const {
-        return kind == VAL_BOOL;
-    }
-
-    string toString() const {
-        switch (kind) {
-            case VAL_INT: return to_string(i);
-            case VAL_FLOAT: {
-                string s = to_string(f);
-                if (s.find('.') != string::npos) {
-                    while (!s.empty() && s.back() == '0') s.pop_back();
-                    if (!s.empty() && s.back() == '.') s.pop_back();
-                }
-                return s;
-            }
-            case VAL_BOOL: return b ? "true" : "false";
-            default: return "void";
-        }
-    }
 };
 
 #endif // AST_H

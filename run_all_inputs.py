@@ -3,10 +3,11 @@ import subprocess
 import shutil
 
 # Archivos c++
-programa = ["main.cpp", "scanner.cpp", "token.cpp", "parser.cpp", "ast.cpp"]
+programa = ["main.cpp", "scanner.cpp", "token.cpp", "parser.cpp", "ast.cpp", "visitor.cpp"]
+ejecutable = "Proyecto2.exe"
 
 # Compilar
-compile = ["g++"] + programa
+compile = ["g++", "-std=c++14", "-o", ejecutable] + programa
 print("Compilando:", " ".join(compile))
 result = subprocess.run(compile, capture_output=True, text=True)
 
@@ -27,7 +28,7 @@ for i in range(1, 3):
 
     if os.path.isfile(filepath):
         print(f"Ejecutando {filename}")
-        run_cmd = ["./a.out", filepath]
+        run_cmd = [os.path.join(".", ejecutable), filepath]
         result = subprocess.run(run_cmd, capture_output=True, text=True)
 
         # Guardar stdout y stderr

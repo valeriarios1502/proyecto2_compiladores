@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -6,146 +7,146 @@
 
 using namespace std;
 
-Value BinaryExp::accept(Visitor* visitor)                  { return visitor->visit(this); }
-Value NumberExpDecimal::accept(Visitor* visitor)           { return visitor->visit(this); }
-Value NumberExpFlotante::accept(Visitor* visitor)          { return visitor->visit(this); }
-Value StringExp::accept(Visitor* visitor)                  { return visitor->visit(this); }
-Value CharExp::accept(Visitor* visitor)                    { return visitor->visit(this); }
-Value IdExp::accept(Visitor* visitor)                      { return visitor->visit(this); }
-Value BoolExp::accept(Visitor* visitor)                    { return visitor->visit(this); }
-Value NotExp::accept(Visitor* visitor)                     { return visitor->visit(this); }
-Value FcallExp::accept(Visitor* visitor)                   { return visitor->visit(this); }
-Value UnaryExp::accept(Visitor* visitor)                   { return visitor->visit(this); }
-Value NewExp::accept(Visitor* visitor)                     { return visitor->visit(this); }
-Value NullExp::accept(Visitor* visitor)                    { return visitor->visit(this); }
-Value UndefinedExp::accept(Visitor* visitor)               { return visitor->visit(this); }
-Value ReferenceExp::accept(Visitor* visitor)               { return visitor->visit(this); }
-Value PunteroExp::accept(Visitor* visitor)                 { return visitor->visit(this); }
-Value AlgoconcorchetesylistaExp::accept(Visitor* visitor)  { return visitor->visit(this); }
-Value AlgoconcorchetesExp::accept(Visitor* visitor)        { return visitor->visit(this); }
-Value PuntoExp::accept(Visitor* visitor)                   { return visitor->visit(this); }
-Value LambdaExp::accept(Visitor* visitor)                  { return visitor->visit(this); }
 
-void IfStmt::accept(Visitor* visitor)     { visitor->visit(this); }
-void WhileStmt::accept(Visitor* visitor)  { visitor->visit(this); }
-void BodyStmt::accept(Visitor* visitor)   { visitor->visit(this); }
-void AsignStmt::accept(Visitor* visitor)  { visitor->visit(this); }
-void PrintStmt::accept(Visitor* visitor)  { visitor->visit(this); }
-void ReturnStm::accept(Visitor* visitor)  { visitor->visit(this); }
-void DeleteStm::accept(Visitor* visitor)  { visitor->visit(this); }
-void ContinueStm::accept(Visitor* visitor){ visitor->visit(this); }
-void BreakStmt::accept(Visitor* visitor)  { visitor->visit(this); }
-void SwitchStmt::accept(Visitor* visitor) { visitor->visit(this); }
-void TryStmt::accept(Visitor* visitor)    { visitor->visit(this); }
-void DeferStmt::accept(Visitor* visitor)  { visitor->visit(this); }
-void ForStmt::accept(Visitor* visitor)    { visitor->visit(this); }
 
-void Fundec::accept(Visitor* visitor)    { visitor->visit(this); }
-void Structdec::accept(Visitor* visitor) { visitor->visit(this); }
-void VarDec::accept(Visitor* visitor)    { visitor->visit(this); }
-void ConstDec::accept(Visitor* visitor)  { visitor->visit(this); }
-void Template::accept(Visitor* visitor)  { visitor->visit(this); }
+static void runtimeError(const string& message) {
+    cerr << "[Error runtime] " << message << endl;
+    exit(EXIT_FAILURE);
+}
 
-void IdType::accept(Visitor* visitor)       { visitor->visit(this); }
-void PointerType::accept(Visitor* visitor)  { visitor->visit(this); }
-void ArrayType::accept(Visitor* visitor)    { visitor->visit(this); }
-void OptionalType::accept(Visitor* visitor) { visitor->visit(this); }
-void ErrorType::accept(Visitor* visitor)    { visitor->visit(this); }
-void UnionType::accept(Visitor* visitor)    { visitor->visit(this); }
-void EnumType::accept(Visitor* visitor)     { visitor->visit(this); }
+static bool isTruthy(const Value& value) {
+    if (!value.isBool()) {
+        runtimeError("se esperaba una expresion booleana");
+    }
+    return value.b;
+}
 
-void Body::accept(Visitor* visitor)     { visitor->visit(this); }
-void Programa::accept(Visitor* visitor) { visitor->visit(this); }
+static double numberValue(const Value& value) {
+    return value.kind == Value::VAL_FLOAT ? value.f : value.i;
+}
+
+static bool valuesEqual(const Value& v1, const Value& v2) {
+    if (v1.isNumeric() && v2.isNumeric()) {
+        return numberValue(v1) == numberValue(v2);
+    }
+
+    if (v1.kind != v2.kind) {
+        return false;
+    }
+
+    switch (v1.kind) {
+        case Value::VAL_BOOL:      return v1.b == v2.b;
+        case Value::VAL_STRING:    return v1.s == v2.s;
+        case Value::VAL_CHAR:      return v1.c == v2.c;
+        case Value::VAL_NULL:
+        case Value::VAL_UNDEFINED:
+        case Value::VAL_VOID:      return true;
+        case Value::VAL_INT:       return v1.i == v2.i;
+        case Value::VAL_FLOAT:     return v1.f == v2.f;
+    }
+
+    return false;
+}
+
+static Value numericBinary(const Value& v1, const Value& v2, BinaryOp op) {
+    if (!v1.isNumeric() || !v2.isNumeric()) {
+        runtimeError("operador numerico aplicado a tipos incompatibles");
+    }
+
+    if (op == MODULO_OP) {
+        if (v1.kind != Value::VAL_INT || v2.kind != Value::VAL_INT) {
+            runtimeError("el operador % solo acepta enteros");
+        }
+        if (v2.i == 0) {
+            runtimeError("division por cero en operador %");
+        }
+        return Value::makeInt(v1.i % v2.i);
+    }
+
+    bool useFloat = op == DIV_OP || v1.kind == Value::VAL_FLOAT || v2.kind == Value::VAL_FLOAT;
+    double n1 = numberValue(v1);
+    double n2 = numberValue(v2);
+
+    if (op == DIV_OP && n2 == 0) {
+        runtimeError("division por cero");
+    }
+
+    switch (op) {
+        case PLUS_OP:
+            return useFloat ? Value::makeFloat(n1 + n2) : Value::makeInt(v1.i + v2.i);
+        case MINUS_OP:
+            return useFloat ? Value::makeFloat(n1 - n2) : Value::makeInt(v1.i - v2.i);
+        case MUL_OP:
+            return useFloat ? Value::makeFloat(n1 * n2) : Value::makeInt(v1.i * v2.i);
+        case DIV_OP:
+            return Value::makeFloat(n1 / n2);
+        default:
+            runtimeError("operador numerico no soportado");
+    }
+
+    return Value();
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////////
-//                    SECCIÓN 3: IMPLEMENTACIÓN DE EVALVisitor
+//                    SECCION 3: IMPLEMENTACION DE EVALVisitor
 ///////////////////////////////////////////////////////////////////////////////////
 
 
 Value EVALVisitor::visit(BinaryExp* exp) {
+    if (exp->op == AND) {
+        Value v1 = exp->left->accept(this);
+        return Value::makeBool(isTruthy(v1) && isTruthy(exp->right->accept(this)));
+    }
+
+    if (exp->op == OR) {
+        Value v1 = exp->left->accept(this);
+        return Value::makeBool(isTruthy(v1) || isTruthy(exp->right->accept(this)));
+    }
+
     Value v1 = exp->left->accept(this);
     Value v2 = exp->right->accept(this);
 
     switch (exp->op) {
         case PLUS_OP:
-            if (v1.isNumeric() && v2.isNumeric()) {
-                if (v1.kind == Value::VAL_FLOAT || v2.kind == Value::VAL_FLOAT) {
-                    return Value::makeFloat((v1.kind == Value::VAL_FLOAT ? v1.f : v1.i) + 
-                                            (v2.kind == Value::VAL_FLOAT ? v2.f : v2.i));
-                } else {
-                    return Value::makeInt(v1.i + v2.i);
-                }
+            if (v1.kind == Value::VAL_STRING || v2.kind == Value::VAL_STRING) {
+                return Value::makeString(v1.toString() + v2.toString());
             }
+            return numericBinary(v1, v2, exp->op);
         case MINUS_OP:
-            if (v1.isNumeric() && v2.isNumeric()) {
-                if (v1.kind == Value::VAL_FLOAT || v2.kind == Value::VAL_FLOAT) {
-                    return Value::makeFloat((v1.kind == Value::VAL_FLOAT ? v1.f : v1.i) - 
-                                            (v2.kind == Value::VAL_FLOAT ? v2.f : v2.i));
-                } else {
-                    return Value::makeInt(v1.i - v2.i);
-                }
-            }
         case MODULO_OP:
-            if (v1.isNumeric() && v2.isNumeric()) {
-                return Value::makeInt(v1.i % v2.i);
-            }
         case MUL_OP:
-            if (v1.isNumeric() && v2.isNumeric()) {
-                if (v1.kind == Value::VAL_FLOAT || v2.kind == Value::VAL_FLOAT) {
-                    return Value::makeFloat((v1.kind == Value::VAL_FLOAT ? v1.f : v1.i) * 
-                                            (v2.kind == Value::VAL_FLOAT ? v2.f : v2.i));
-                } else {
-                    return Value::makeInt(v1.i * v2.i);
-                }
-            }
         case DIV_OP:
-            if (v1.isNumeric() && v2.isNumeric()) {
-                return Value::makeFloat((v1.kind == Value::VAL_FLOAT ? v1.f : v1.i) / 
-                                        (v2.kind == Value::VAL_FLOAT ? v2.f : v2.i));
-                } 
+            return numericBinary(v1, v2, exp->op);
         case DIFERENTE_OP:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i != v2.i);
-                }
-                else if (v1.isBool() && v2.isBool()) {
-                    return Value::makeBool(v1.i != v2.i);
-                }
+            return Value::makeBool(!valuesEqual(v1, v2));
         case MENORI:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i <= v2.i);
-                }
+            if (v1.isNumeric() && v2.isNumeric()) {
+                return Value::makeBool(numberValue(v1) <= numberValue(v2));
+            }
+            runtimeError("<= requiere numeros");
         case MENOR:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i < v2.i);
-                }
+            if (v1.isNumeric() && v2.isNumeric()) {
+                return Value::makeBool(numberValue(v1) < numberValue(v2));
+            }
+            runtimeError("< requiere numeros");
         case MAYORI:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i >= v2.i);
-                }
+            if (v1.isNumeric() && v2.isNumeric()) {
+                return Value::makeBool(numberValue(v1) >= numberValue(v2));
+            }
+            runtimeError(">= requiere numeros");
         case MAYOR:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i > v2.i);
-                }
+            if (v1.isNumeric() && v2.isNumeric()) {
+                return Value::makeBool(numberValue(v1) > numberValue(v2));
+            }
+            runtimeError("> requiere numeros");
         case IGUALIGUAL:
-                if (v1.isNumeric() && v2.isNumeric()) {
-                    return Value::makeBool(v1.i == v2.i);
-                }
-                else if (v1.isBool() && v2.isBool()) {
-                    return Value::makeBool(v1.i == v2.i);
-                }
-        case AND:
-                if (v1.isBool() && v2.isBool()) {
-                    return Value::makeBool(v1.i && v2.i);
-                }
-        case OR:
-                if (v1.isBool() && v2.isBool()) {
-                    return Value::makeBool(v1.i || v2.i);
-                }
+            return Value::makeBool(valuesEqual(v1, v2));
         default:
-            cout << "Operador desconocido" << endl;
-            return Value::makeInt(0);
+            runtimeError("operador binario no soportado");
     }
+
+    return Value();
 }
 
 Value EVALVisitor::visit(NumberExpDecimal* exp) {
@@ -164,29 +165,45 @@ Value EVALVisitor::visit(CharExp* exp) {
     return Value::makeChar(exp->valor);
 }
 
-//revisarlo bn
 Value EVALVisitor::visit(IdExp* exp) {
+    if (!env.check(exp->value)) {
+        runtimeError("variable no definida: " + exp->value);
+    }
     return env.lookup(exp->value);
 }
-//revisarlo bn
+
 Value EVALVisitor::visit(BoolExp* exp) {
     return Value::makeBool(exp->booleano == "true");
 }
 
 Value EVALVisitor::visit(NotExp* exp) {
-    return Value::makeBool(!exp->exp->accept(this).b);
+    return Value::makeBool(!isTruthy(exp->exp->accept(this)));
 }
 
 Value EVALVisitor::visit(FcallExp* fcall) {
-    retcall = false;
+    auto it = envfun.find(fcall->nombre);
+    if (it == envfun.end() || it->second == nullptr) {
+        runtimeError("funcion no definida: " + fcall->nombre);
+    }
+
+    Fundec* fd = it->second;
+    if (fd->id_parametros.size() != fcall->argumentos.size()) {
+        runtimeError("numero incorrecto de argumentos en llamada a " + fcall->nombre);
+    }
+
     vector<Value> arg;
-    for (auto i : fcall->argumentos) {
+    for (Exp* i : fcall->argumentos) {
         arg.push_back(i->accept(this));
     }
-    Fundec* fd = envfun[fcall->nombre];
+
+    bool retcallAnterior = retcall;
+    Value retvalAnterior = retval;
+    retcall = false;
+    retval = Value();
+
     env.add_level();
 
-    // Cargar los parámetros con sus valores
+    // Cargar los parametros con sus valores
     for (size_t i = 0; i < arg.size(); ++i) {
         env.add_var(fd->id_parametros[i], arg[i]);
     }
@@ -194,14 +211,285 @@ Value EVALVisitor::visit(FcallExp* fcall) {
     fd->cuerpo->accept(this);
     env.remove_level();
 
-    if (retcall) {
-        return retval;
-    } else {
-        cout << "Error: la función '" << fcall->nombre << "' no tiene retorno" << endl;
-        exit(0);
+    Value result = retcall ? retval : Value();
+    retcall = retcallAnterior;
+    retval = retvalAnterior;
+    return result;
+}
+
+Value EVALVisitor::visit(UnaryExp* exp) {
+    Value value = exp->exp->accept(this);
+
+    switch (exp->op) {
+        case UnaryExp::NEGATE:
+            if (!value.isNumeric()) {
+                runtimeError("el operador - requiere un numero");
+            }
+            return value.kind == Value::VAL_FLOAT ? Value::makeFloat(-value.f) : Value::makeInt(-value.i);
+        case UnaryExp::NOT_OP:
+            return Value::makeBool(!isTruthy(value));
+        case UnaryExp::ADDRESS:
+        case UnaryExp::DEREF:
+            return value;
+    }
+
+    return Value();
+}
+
+Value EVALVisitor::visit(NewExp* exp) {
+    return Value::makeUndefined();
+}
+
+Value EVALVisitor::visit(NullExp* exp) {
+    return Value::makeNull();
+}
+
+Value EVALVisitor::visit(UndefinedExp* exp) {
+    return Value::makeUndefined();
+}
+
+Value EVALVisitor::visit(ReferenceExp* exp) {
+    return exp->exp ? exp->exp->accept(this) : Value::makeUndefined();
+}
+
+Value EVALVisitor::visit(PunteroExp* exp) {
+    return exp->exp ? exp->exp->accept(this) : Value::makeUndefined();
+}
+
+Value EVALVisitor::visit(AlgoconcorchetesylistaExp* exp) {
+    runtimeError("indexacion con lista no implementada en EVALVisitor");
+    return Value();
+}
+
+Value EVALVisitor::visit(AlgoconcorchetesExp* exp) {
+    runtimeError("indexacion no implementada en EVALVisitor");
+    return Value();
+}
+
+Value EVALVisitor::visit(PuntoExp* exp) {
+    if (exp->id == "__unwrap__") {
+        Value value = exp->exp->accept(this);
+        if (value.kind == Value::VAL_NULL || value.kind == Value::VAL_UNDEFINED) {
+            runtimeError("no se puede desempaquetar null/undefined");
+        }
+        return value;
+    }
+
+    runtimeError("acceso por punto no implementado en EVALVisitor");
+    return Value();
+}
+
+Value EVALVisitor::visit(LambdaExp* exp) {
+    return Value::makeUndefined();
+}
+
+void EVALVisitor::visit(IfStmt* stm) {
+    if (isTruthy(stm->condicion->accept(this))) {
+        stm->cuerpodelif->accept(this);
+    } else if (stm->hayelse && stm->cuerpodelelse != nullptr) {
+        stm->cuerpodelelse->accept(this);
     }
 }
 
+void EVALVisitor::visit(WhileStmt* stm) {
+    while (isTruthy(stm->condicion->accept(this))) {
+        env.add_level();
+        for (Stmt* stmt : stm->cuerpodelwhile) {
+            stmt->accept(this);
+            if (retcall || breakcall || continuecall) {
+                break;
+            }
+        }
+        env.remove_level();
 
+        if (retcall) {
+            return;
+        }
+        if (breakcall) {
+            breakcall = false;
+            return;
+        }
+        if (continuecall) {
+            continuecall = false;
+        }
+    }
+}
 
+void EVALVisitor::visit(BodyStmt* stm) {
+    stm->cuerpo->accept(this);
+}
 
+void EVALVisitor::visit(AsignStmt* stm) {
+    Value value = stm->exp ? stm->exp->accept(this) : Value();
+    if (env.check(stm->variable)) {
+        env.update(stm->variable, value);
+    } else {
+        env.add_var(stm->variable, value);
+    }
+}
+
+void EVALVisitor::visit(PrintStmt* stm) {
+    cout << stm->exp->accept(this).toString() << endl;
+}
+
+void EVALVisitor::visit(ReturnStm* stm) {
+    retval = stm->exp ? stm->exp->accept(this) : Value();
+    retcall = true;
+}
+
+void EVALVisitor::visit(DeleteStm* stm) {
+}
+
+void EVALVisitor::visit(ContinueStm* stm) {
+    continuecall = true;
+}
+
+void EVALVisitor::visit(BreakStmt* stm) {
+    breakcall = true;
+}
+
+void EVALVisitor::visit(SwitchStmt* stm) {
+    Value condition = stm->condicion->accept(this);
+
+    for (auto& caso : stm->casos) {
+        if (valuesEqual(condition, caso.first->accept(this))) {
+            caso.second->accept(this);
+            if (breakcall) {
+                breakcall = false;
+            }
+            return;
+        }
+    }
+
+    if (stm->default_caso != nullptr) {
+        stm->default_caso->accept(this);
+        if (breakcall) {
+            breakcall = false;
+        }
+    }
+}
+
+void EVALVisitor::visit(TryStmt* stm) {
+    if (stm->expr != nullptr) {
+        stm->expr->accept(this);
+    }
+    if (stm->try_body != nullptr) {
+        stm->try_body->accept(this);
+    }
+}
+
+void EVALVisitor::visit(DeferStmt* stm) {
+}
+
+void EVALVisitor::visit(ForStmt* stm) {
+    env.add_level();
+    if (stm->asignacion != nullptr) {
+        stm->asignacion->accept(this);
+    }
+
+    while (stm->condicion == nullptr || isTruthy(stm->condicion->accept(this))) {
+        stm->cuerpo->accept(this);
+        if (retcall) {
+            break;
+        }
+        if (breakcall) {
+            breakcall = false;
+            break;
+        }
+        if (continuecall) {
+            continuecall = false;
+        }
+        if (stm->incremento != nullptr) {
+            stm->incremento->accept(this);
+        }
+    }
+
+    env.remove_level();
+}
+
+void EVALVisitor::visit(Fundec* fd) {
+    envfun[fd->nombre] = fd;
+}
+
+void EVALVisitor::visit(Structdec* sd) {
+}
+
+void EVALVisitor::visit(VarDec* vd) {
+    Value value = vd->exp ? vd->exp->accept(this) : Value();
+    env.add_var(vd->nombre, value);
+}
+
+void EVALVisitor::visit(ConstDec* cd) {
+    Value value = cd->exp ? cd->exp->accept(this) : Value();
+    env.add_var(cd->nombre, value);
+}
+
+void EVALVisitor::visit(Template* t) {
+}
+
+void EVALVisitor::visit(IdType* tipo) {
+}
+
+void EVALVisitor::visit(PointerType* tipo) {
+}
+
+void EVALVisitor::visit(ArrayType* tipo) {
+}
+
+void EVALVisitor::visit(OptionalType* tipo) {
+}
+
+void EVALVisitor::visit(ErrorType* tipo) {
+}
+
+void EVALVisitor::visit(UnionType* tipo) {
+}
+
+void EVALVisitor::visit(EnumType* tipo) {
+}
+
+void EVALVisitor::visit(Body* body) {
+    env.add_level();
+    for (Stmt* stmt : body->slist) {
+        stmt->accept(this);
+        if (retcall || breakcall || continuecall) {
+            break;
+        }
+    }
+    env.remove_level();
+}
+
+void EVALVisitor::visit(Programa* programa) {
+    env.clear();
+    envfun.clear();
+    retcall = false;
+    breakcall = false;
+    continuecall = false;
+
+    env.add_level();
+
+    for (Top_dec* dec : programa->declist) {
+        if (Fundec* fd = dynamic_cast<Fundec*>(dec)) {
+            visit(fd);
+        }
+    }
+
+    for (Top_dec* dec : programa->declist) {
+        if (dynamic_cast<Fundec*>(dec) == nullptr) {
+            dec->accept(this);
+        }
+    }
+
+    auto mainIt = envfun.find("main");
+    if (mainIt != envfun.end()) {
+        FcallExp mainCall;
+        mainCall.nombre = "main";
+        visit(&mainCall);
+    }
+
+    env.remove_level();
+}
+
+void EVALVisitor::interprete(Programa* programa) {
+    programa->accept(this);
+}

@@ -4,6 +4,7 @@
 #include "scanner.h"
 #include "parser.h"
 #include "ast.h"
+#include "visitor.h"
 
 using namespace std;
 
@@ -44,11 +45,15 @@ int main(int argc, const char* argv[]) {
 
     try {
         ast = parser.parseProgram();
-    } catch (const std::exception& e) {
+        EVALVisitor eval;
+        eval.interprete(ast);
+    }
+    catch (const std::exception &e) {
         cerr << "Error al parsear: " << e.what() << endl;
         ast = nullptr;
     }
 
+    delete ast;
 
     return 0;
-}
+};

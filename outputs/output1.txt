@@ -1,4 +1,9 @@
 === STDOUT ===
 Parseo exitoso
+42
+1
+0
+99
+10
 
 === STDERR ===
