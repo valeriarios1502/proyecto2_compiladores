@@ -9,6 +9,9 @@ using namespace std;
 // ============================================================
 
 void TypeCheckerVisitor::typecheck(Programa* programa) {
+    env.clear();      
+    funEnv.clear();
+    structEnv.clear();
     registerStructs(programa);
     registerFunctions(programa);
     programa->accept(this);
@@ -411,18 +414,29 @@ Value TypeCheckerVisitor::visit(BinaryExp* exp) {
 
     switch (exp->op) {
         case PLUS_OP:
-        case MINUS_OP:
-        case MUL_OP:
-        case DIV_OP:
-        case MODULO_OP:
-            if (exp->op == PLUS_OP && leftType == "string" && rightType == "string") {
+            if (leftType == "string" && rightType == "string") {
                 currentType = "string";
                 return Value();
             }
             if (!isNumeric(leftType) || !isNumeric(rightType))
-                throw runtime_error("TypeChecker: operación aritmética requiere tipos numéricos, se obtuvo '" +
+                throw runtime_error("'+' requiere numéricos o strings, se obtuvo '" +
                                     leftType + "' y '" + rightType + "'");
             currentType = (leftType == "float" || rightType == "float") ? "float" : "int";
+            break;
+
+        case MINUS_OP:
+        case MUL_OP:
+        case MODULO_OP:
+            if (!isNumeric(leftType) || !isNumeric(rightType))
+                throw runtime_error("Operación aritmética requiere numéricos, se obtuvo '" +
+                                    leftType + "' y '" + rightType + "'");
+            currentType = (leftType == "float" || rightType == "float") ? "float" : "int";
+            break;
+
+        case DIV_OP:
+            if (!isNumeric(leftType) || !isNumeric(rightType))
+                throw runtime_error("'/' requiere numéricos");
+            currentType = "float";  
             break;
 
         case MENORI:   // <=
@@ -597,10 +611,11 @@ Value TypeCheckerVisitor::visit(AlgoconcorchetesExp* exp) {
 
 Value TypeCheckerVisitor::visit(AlgoconcorchetesylistaExp* exp) {
     // expr[a, b, ...]  (multi-índice)
-    inferType(exp->nombre);
+    string baseType = inferType(exp->nombre);
     for (Exp* e : exp->argumentos)
         inferType(e);
     // Por simplicidad devolvemos el mismo tipo base
+    currentType = baseType;
     return Value();
 }
 

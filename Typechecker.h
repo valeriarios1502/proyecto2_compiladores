@@ -21,7 +21,7 @@ public:
 
     std::string currentType;
     std::string expectedReturnType;
-    bool hasReturn;
+    bool hasReturn = false;
     std::string currentFunction;
     Environment<std::string> env;
     std::unordered_map<std::string, FunInfo> funEnv;
