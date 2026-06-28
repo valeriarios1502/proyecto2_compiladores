@@ -1,9 +1,189 @@
 === STDOUT ===
 Parseo exitoso
-42
-1
-0
-99
-10
+.section .data
+print_i32_fmt:  .string "%d\n"
+print_i64_fmt:  .string "%ld\n"
+print_u64_fmt:  .string "%lu\n"
+print_f32_fmt:  .string "%f\n"
+print_f64_fmt:  .string "%g\n"
+print_str_fmt:  .string "%s\n"
+
+.section .text
+.globl main
+    xorq  %rax, %rax
+    movq  %rax, -8(%rbp)
+
+dividir:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $256, %rsp
+    movq  %rdi, -8(%rbp)
+    movq  %rsi, -16(%rbp)
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    sete  %al
+    movzbq %al, %rax
+    cmpq  $0, %rax
+    je    else_0
+    xorq  %rax, %rax
+    leave
+    ret
+    jmp   endif_1
+else_0:
+endif_1:
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cqto
+    idivq %rcx
+    leave
+    ret
+    xorq  %rax, %rax
+    leave
+    ret
+
+procesar:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $256, %rsp
+    movq  %rdi, -8(%rbp)
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    pushq %rax
+    cmpq  %rcx, %rax
+    jne   switch_next_3
+    movq  $0, %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %rcx
+    jmp   switch_end_2
+switch_next_3:
+    movq  $1, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    pushq %rax
+    cmpq  %rcx, %rax
+    jne   switch_next_4
+    movq  $1, %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %rcx
+    jmp   switch_end_2
+switch_next_4:
+    movq  $99, %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %rcx
+switch_end_2:
+    xorq  %rax, %rax
+    leave
+    ret
+
+main:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $256, %rsp
+    movq  $8, %rdi
+    andq  $-16, %rsp
+    call  malloc@PLT
+    movq  %rax, -8(%rbp)
+    movq  $10, %rax
+    movq  %rax, -16(%rbp)
+    movq  $2, %rax
+    movq  %rax, -24(%rbp)
+    xorq  %rax, %rax
+    movq  %rax, -32(%rbp)
+    movq  $42, %rax
+    movq  %rax, -32(%rbp)
+    movq  -32(%rbp), %rax
+    pushq %rax
+    xorq  %rax, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    sete  %al
+    movzbq %al, %rax
+    cmpq  $0, %rax
+    je    else_5
+    movq  $0, %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    jmp   endif_6
+else_5:
+    movq  -32(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+endif_6:
+    movq  $0, %rax
+    movq  %rax, -40(%rbp)
+    xorq  %rax, %rax
+    movq  %rax, -40(%rbp)
+    movq  $1, %rax
+    pushq %rax
+    popq  %rdi
+    andq  $-16, %rsp
+    call  procesar
+    movq  $0, %rax
+    pushq %rax
+    popq  %rdi
+    andq  $-16, %rsp
+    call  procesar
+    movq  $5, %rax
+    pushq %rax
+    popq  %rdi
+    andq  $-16, %rsp
+    call  procesar
+    xorq  %rax, %rax
+    movq  %rax, -48(%rbp)
+    movq  -16(%rbp), %rax
+    leaq  -16(%rbp), %rax
+    movq  %rax, -56(%rbp)
+    movq  -56(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    xorq  %rax, %rax
+    leave
+    ret
+
+.section .note.GNU-stack,"",@progbits
 
 === STDERR ===

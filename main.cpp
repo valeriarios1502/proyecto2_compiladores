@@ -45,8 +45,8 @@ int main(int argc, const char* argv[]) {
 
     try {
         ast = parser.parseProgram();
-        EVALVisitor eval;
-        eval.interprete(ast);
+        GenCodeVisitor eval;
+        eval.gencode(ast);
     }
     catch (const std::exception &e) {
         cerr << "Error al parsear: " << e.what() << endl;
