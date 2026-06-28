@@ -73,7 +73,6 @@ Programa* Parser::parseP() {
     while (!isAtEnd()) {
         if (check(Token::VAR)) {
             p->declist.push_back(parseVar_dec());
-            match(Token::SEMICOL);
         } else if (check(Token::CONST)) {
             p->declist.push_back(parseConts_dec());
             match(Token::SEMICOL);
@@ -164,10 +163,12 @@ Top_dec* Parser::parseVar_dec() {
         var->tipo = parseType();
         expect(Token::ASSIGN, "Se esperaba '=' en var");
         var->exp = parseLogicExp();
+        match(Token::SEMICOL);
     } else if (match(Token::ASSIGN)) {
         var->tienetipo = false;
         var->tipo = nullptr;
         var->exp = parseLogicExp();
+        match(Token::SEMICOL);
     } else {
         throw runtime_error("Error sintáctico en var: se esperaba ':' o '='");
     }
