@@ -1,13 +1,38 @@
-pub fn clasifica (n : i32) void {
-  switch (n) {
-    1 => {
-      print("uno");
-    },
-    2 => {
-      print("dos");
-    },
-    else => {
-      print("otro");
-    },
+comptime {
+  var X = 10 * 10;
+  print(X);
+}
+
+pub fn doble (comptime N : i32) i32 {
+  var suma = N * 2;
+  return suma;
+}
+
+pub fn triple (comptime N : i32) i32 {
+  var r = N * 3;
+  return r;
+}
+
+pub fn potencia (comptime base : i32, exp : i32) i32 {
+  var resultado = 1;
+  var i = 0;
+  while (i < exp) {
+    resultado = resultado * base;
+    i = i + 1;
   }
+  return resultado;
+}
+
+pub fn main () void {
+  var d = doble(5);
+  print(d);
+
+  var t = triple(7);
+  print(t);
+
+  var p = potencia(2, 8);
+  print(p);
+
+  var q = potencia(3, 4);
+  print(q);
 }

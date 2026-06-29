@@ -9,3 +9,15 @@ var nada = null;
 var indef = undefined;
 const PI : f64 = 3.14159;
 const MAX = 100;
+
+pub fn main () void {
+  print(x);
+  print(y);
+  print(h);
+  print(b);
+  print(s);
+  print(ch);
+  print(flag);
+  print(PI);
+  print(MAX);
+}

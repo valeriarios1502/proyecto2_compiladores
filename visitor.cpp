@@ -3,126 +3,301 @@
 #include <fstream>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include "ast.h"
 #include "visitor.h"
 #include <cstdint>
 
 using namespace std;
 
-// ═════════════════════════════════════════════════════════
-//   GenCodeVisitor — generación de código x86-64 AT&T
-// ═════════════════════════════════════════════════════════
-//
-//  Convenciones System V AMD64:
-//   Caller-saved : %rax %rcx %rdx %rsi %rdi %r8 %r9 %r10 %r11
-//   Callee-saved : %rbx %rbp %r12 %r13 %r14 %r15
-//   Argumentos   : %rdi %rsi %rdx %rcx %r8 %r9  (en ese orden)
-//   Retorno      : %rax
-//
-//  Invariante: toda expresión deja su resultado en %rax.
-//  Para A op B:
-//    1. eval(A) → pushq %rax
-//    2. eval(B) → %rax
-//    3. movq %rax, %rcx  ;  popq %rax
-//    4. %rax OP %rcx → %rax
-// ═════════════════════════════════════════════════════════
-
+// ── Registros de argumentos (System V AMD64) ─────────────
 static const char* argRegs[] = {
     "%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"
 };
 static const int MAX_REG_ARGS = 6;
 
-// ── Punto de entrada ─────────────────────────────────────
+// =============================================================================
+//  Helpers internos (no miembro)
+// =============================================================================
+
+// Escapa caracteres especiales de un string para .string de GAS
+static string escapeString(const string& s) {
+    string out;
+    for (char c : s) {
+        switch (c) {
+            case '\n': out += "\\n";  break;
+            case '\t': out += "\\t";  break;
+            case '\r': out += "\\r";  break;
+            case '\\': out += "\\\\"; break;
+            case '"':  out += "\\\""; break;
+            default:   out += c;      break;
+        }
+    }
+    return out;
+}
+
+// ── Clasifica el tipo de una expresión para saber qué formato usar al imprimir
+static std::string inferGlobalType(Exp* exp) {
+    if (!exp)                                  return "int";
+    if (dynamic_cast<NumberExpFlotante*>(exp)) return "float";
+    if (dynamic_cast<StringExp*>(exp))         return "str";
+    if (dynamic_cast<CharExp*>(exp))           return "char";
+    if (dynamic_cast<BoolExp*>(exp))           return "bool";
+    return "int";
+}
+
+void GenCodeVisitor::emitGlobalVarDec(VarDec* vd) {
+    globalNames.insert(vd->nombre);
+    string gtype = inferGlobalType(vd->exp);
+    globalTypes[vd->nombre] = gtype;
+
+    cout << ".globl " << vd->nombre << endl;
+
+    if (gtype == "float") {
+        double val = 0.0;
+        if (NumberExpFlotante* ne = dynamic_cast<NumberExpFlotante*>(vd->exp))
+            val = ne->value;
+        int64_t bits = 0;
+        memcpy(&bits, &val, sizeof(bits));
+        cout << vd->nombre << ": .quad " << bits << endl;  // bits de double
+
+    } else if (gtype == "str") {
+        // El puntero al string se inicializa en main_init o similar;
+        // por simplicidad guardamos la dirección vía .quad con reloc.
+        // Guardamos el label del string como quad (requiere enlazador).
+        string lbl = internString(dynamic_cast<StringExp*>(vd->exp)->valor);
+        cout << vd->nombre << ": .quad " << lbl << endl;
+
+    } else if (gtype == "char") {
+        int val = 0;
+        if (CharExp* ce = dynamic_cast<CharExp*>(vd->exp))
+            val = (unsigned char)ce->valor;
+        cout << vd->nombre << ": .quad " << val << endl;
+
+    } else if (gtype == "bool") {
+        int val = 0;
+        if (BoolExp* be = dynamic_cast<BoolExp*>(vd->exp))
+            val = (be->booleano == "true") ? 1 : 0;
+        cout << vd->nombre << ": .quad " << val << endl;
+
+    } else {
+        // int / hex / binario / null / undefined → todo cabe en .quad
+        int64_t val = 0;
+        if (NumberExpDecimal* ne = dynamic_cast<NumberExpDecimal*>(vd->exp))
+            val = ne->value;
+        // null/undefined → 0 ya está
+        cout << vd->nombre << ": .quad " << val << endl;
+    }
+}
+
+void GenCodeVisitor::emitGlobalConstDec(ConstDec* cd) {
+    globalNames.insert(cd->nombre);
+    string gtype = inferGlobalType(cd->exp);
+    globalTypes[cd->nombre] = gtype;
+
+    cout << ".globl " << cd->nombre << endl;
+
+    if (gtype == "float") {
+        double val = 0.0;
+        if (NumberExpFlotante* ne = dynamic_cast<NumberExpFlotante*>(cd->exp))
+            val = ne->value;
+        int64_t bits = 0;
+        memcpy(&bits, &val, sizeof(bits));
+        cout << cd->nombre << ": .quad " << bits << endl;
+    } else {
+        int64_t val = 0;
+        if (NumberExpDecimal* ne = dynamic_cast<NumberExpDecimal*>(cd->exp))
+            val = ne->value;
+        cout << cd->nombre << ": .quad " << val << endl;
+    }
+}
+
+// =============================================================================
+//  gencode — punto de entrada público
+// =============================================================================
 
 void GenCodeVisitor::gencode(Programa* programa) {
-    // 1. Registrar funciones para forward references
+    // ── Pase 0: pre-registrar structs para conocer offsets de campos ──────
+    for (Top_dec* d : programa->declist) {
+        if (Structdec* sd = dynamic_cast<Structdec*>(d)) {
+            for (size_t i = 0; i < sd->id_parametros.size(); ++i)
+                structFieldOffsets[sd->nombre][sd->id_parametros[i]] = (int)i * 8;
+            structFieldCount[sd->nombre] = (int)sd->id_parametros.size();
+        }
+        // Unions también se registran como structs
+        if (VarDec* vd = dynamic_cast<VarDec*>(d)) {
+            if (UnionType* ut = dynamic_cast<UnionType*>(vd->tipo)) {
+                for (size_t i = 0; i < ut->campo_nombres.size(); ++i)
+                    structFieldOffsets[ut->nombre][ut->campo_nombres[i]] = (int)i * 8;
+                structFieldCount[ut->nombre] = (int)ut->campo_nombres.size();
+            }
+        }
+    }
+
+    // ── Pase 1: registrar todas las funciones para forward-references ─────
     for (Top_dec* d : programa->declist)
         if (Fundec* fd = dynamic_cast<Fundec*>(d))
             funEnv[fd->nombre] = fd;
 
-    // 2. Sección de datos: formatos printf
-    cout << ".section .data" << endl;
-    cout << "print_i32_fmt:  .string \"%d\\n\""  << endl;
-    cout << "print_i64_fmt:  .string \"%ld\\n\"" << endl;
-    cout << "print_u64_fmt:  .string \"%lu\\n\"" << endl;
-    cout << "print_f32_fmt:  .string \"%f\\n\""  << endl;
-    cout << "print_f64_fmt:  .string \"%g\\n\""  << endl;
-    cout << "print_str_fmt:  .string \"%s\\n\""  << endl;
+    // ── Sección .data ─────────────────────────────────────────────────────
+    cout << ".section .data"                           << endl;
+    cout << "print_int_fmt:   .string \"%ld\\n\""     << endl;
+    cout << "print_uint_fmt:  .string \"%lu\\n\""     << endl;
+    cout << "print_float_fmt: .string \"%g\\n\""      << endl;
+    cout << "print_str_fmt:   .string \"%s\\n\""      << endl;
+    cout << "print_char_fmt:  .string \"%c\\n\""      << endl;
+    cout << "print_bool_true: .string \"true\\n\""    << endl;
+    cout << "print_bool_false:.string \"false\\n\""   << endl;
     cout << endl;
 
-    // 3. Sección de texto
+    // ── Pase 2: emitir variables/constantes globales en .data ─────────────
+    for (Top_dec* d : programa->declist) {
+        if (VarDec* vd = dynamic_cast<VarDec*>(d))
+            emitGlobalVarDec(vd);
+        else if (ConstDec* cd = dynamic_cast<ConstDec*>(d))
+            emitGlobalConstDec(cd);
+    }
+
     cout << ".section .text" << endl;
+
+    // ── Sección .text ─────────────────────────────────────────────────────
     cout << ".globl main"    << endl;
 
-    // 4. Generar código de cada declaración
     programa->accept(this);
 
-    // 5. Sección .rodata con literales de string acumulados
+    // ── Sección .rodata con literales de string ───────────────────────────
     if (!stringLiterals.empty()) {
         cout << endl;
         cout << ".section .rodata" << endl;
         for (auto& p : stringLiterals)
-            cout << p.first << ": .string \"" << p.second << "\"" << endl;
+            cout << p.first << ": .string \"" << escapeString(p.second) << "\"" << endl;
     }
 
-    // 6. Marca de stack no ejecutable
+    // ── Marca de stack no ejecutable ──────────────────────────────────────
     cout << endl;
     cout << ".section .note.GNU-stack,\"\",@progbits" << endl;
 }
 
-// ── Programa ─────────────────────────────────────────────
+// =============================================================================
+//  Programa
+// =============================================================================
 
 void GenCodeVisitor::visit(Programa* p) {
+    for (Top_dec* d : p->declist)
+        if (Fundec* fd = dynamic_cast<Fundec*>(d))
+            if (fd->nombre == "__comptime__")
+                hayComptimeGlobal = true;
+
     for (Top_dec* d : p->declist)
         d->accept(this);
 }
 
-// ── Funciones ────────────────────────────────────────────
+// =============================================================================
+//  emitAlignedCall
+//  Guarda %rsp en %r12 (callee-saved), alinea a 16, llama, restaura.
+//  Antes de usarlo en funciones que también usan %r12 para printf, hay que
+//  salvar/restaurar %r12 en el prólogo/epílogo de la función.  Como aquí cada
+//  función generada tiene su propio frame grande, es seguro reutilizarlo.
+// =============================================================================
+
+void GenCodeVisitor::emitAlignedCall(const string& target) {
+    cout << "    pushq %r12"           << endl;   // salvar callee-saved
+    cout << "    movq  %rsp, %r12"     << endl;
+    cout << "    andq  $-16, %rsp"     << endl;
+    cout << "    xorq  %rax, %rax"     << endl;   // 0 regs XMM para varargs
+    cout << "    call  " << target     << endl;
+    cout << "    movq  %r12, %rsp"     << endl;
+    cout << "    popq  %r12"           << endl;   // restaurar
+}
+
+// =============================================================================
+//  Fundec — generación de función
+// =============================================================================
 
 void GenCodeVisitor::visit(Fundec* fd) {
-    if (fd->nombre == "__comptime__") return;
+    string asmName = (fd->nombre == "__comptime__") ? "_comptime_init" : fd->nombre;
 
-    // Guardar estado del contexto anterior
     string prevFunction  = currentFunction;
     string prevLoopEnd   = currentLoopEnd;
     string prevLoopStart = currentLoopStart;
     auto   prevPosicion  = posicion;
     int    prevContador  = varContador;
 
-    currentFunction  = fd->nombre;
+    currentFunction  = asmName;
     currentLoopEnd   = "";
     currentLoopStart = "";
     posicion.clear();
     varContador = 1;
 
-    // Registrar parámetros en el entorno (primeros slots del frame)
     for (size_t i = 0; i < fd->id_parametros.size(); ++i)
         posicion[fd->id_parametros[i]] = varContador++;
 
-    const int FRAME_SLOTS = 64;  // 512 bytes — espacio para arrays locales
+    const int FRAME_SLOTS = 128;
     int frameBytes = alignFrame(FRAME_SLOTS);
 
-    // ── Prólogo ──────────────────────────────────────────
     cout << endl;
-    cout << fd->nombre << ":" << endl;
-    cout << "    pushq %rbp"                         << endl;
-    cout << "    movq  %rsp, %rbp"                   << endl;
-    cout << "    subq  $" << frameBytes << ", %rsp"  << endl;
+    cout << asmName << ":" << endl;
+    cout << "    pushq %rbp"                        << endl;
+    cout << "    movq  %rsp, %rbp"                  << endl;
+    cout << "    subq  $" << frameBytes << ", %rsp" << endl;
 
-    // Copiar argumentos de registros al stack
     for (size_t i = 0; i < fd->id_parametros.size() && i < (size_t)MAX_REG_ARGS; ++i)
-        cout << "    movq  " << argRegs[i] << ", "
-             << offset(fd->id_parametros[i]) << endl;
+        cout << "    movq  " << argRegs[i] << ", " << offset(fd->id_parametros[i]) << endl;
 
-    // ── Cuerpo ───────────────────────────────────────────
+    // ── Si es main y hay comptime, llamarlo primero ───────────────────────
+    if (fd->nombre == "main" && hayComptimeGlobal)
+        emitAlignedCall("_comptime_init");
+
     if (fd->cuerpo) fd->cuerpo->accept(this);
 
-    // ── Epílogo de seguridad ─────────────────────────────
     cout << "    xorq  %rax, %rax" << endl;
     cout << "    leave"            << endl;
     cout << "    ret"              << endl;
 
-    // Restaurar contexto
+    currentFunction  = prevFunction;
+    currentLoopEnd   = prevLoopEnd;
+    currentLoopStart = prevLoopStart;
+    posicion         = prevPosicion;
+    varContador      = prevContador;
+}
+// =============================================================================
+//  Template — instancia genérica tratada como función concreta
+// =============================================================================
+
+void GenCodeVisitor::visit(Template* t) {
+    string prevFunction  = currentFunction;
+    string prevLoopEnd   = currentLoopEnd;
+    string prevLoopStart = currentLoopStart;
+    auto   prevPosicion  = posicion;
+    int    prevContador  = varContador;
+
+    currentFunction  = t->id1;
+    currentLoopEnd   = "";
+    currentLoopStart = "";
+    posicion.clear();
+    varContador = 1;
+
+    for (size_t i = 0; i < t->id_parametros.size(); ++i)
+        posicion[t->id_parametros[i]] = varContador++;
+
+    const int FRAME_SLOTS = 128;
+    int frameBytes = alignFrame(FRAME_SLOTS);
+
+    cout << endl;
+    cout << t->id1 << ":" << endl;
+    cout << "    pushq %rbp"                        << endl;
+    cout << "    movq  %rsp, %rbp"                  << endl;
+    cout << "    subq  $" << frameBytes << ", %rsp" << endl;
+
+    for (size_t i = 0; i < t->id_parametros.size() && i < (size_t)MAX_REG_ARGS; ++i)
+        cout << "    movq  " << argRegs[i] << ", " << offset(t->id_parametros[i]) << endl;
+
+    if (t->block) t->block->accept(this);
+
+    cout << "    xorq  %rax, %rax" << endl;
+    cout << "    leave"            << endl;
+    cout << "    ret"              << endl;
+
     currentFunction  = prevFunction;
     currentLoopEnd   = prevLoopEnd;
     currentLoopStart = prevLoopStart;
@@ -130,29 +305,92 @@ void GenCodeVisitor::visit(Fundec* fd) {
     varContador      = prevContador;
 }
 
-// ── Body ─────────────────────────────────────────────────
+// =============================================================================
+//  Structdec — solo registra offsets (ya hecho en gencode()), no emite código
+// =============================================================================
+
+void GenCodeVisitor::visit(Structdec* sd) {
+    // Los offsets ya fueron registrados en gencode().
+    // No se emite ninguna instrucción: los structs son solo layout.
+}
+
+// =============================================================================
+//  Body
+// =============================================================================
 
 void GenCodeVisitor::visit(Body* b) {
     for (Stmt* s : b->slist)
         s->accept(this);
 }
 
-// ── Declaraciones de variables ────────────────────────────
+// =============================================================================
+//  VarDec / ConstDec
+//
+//  Casos especiales:
+//   - Tipo struct: reservar N campos consecutivos; guardar dirección base.
+//   - Tipo array [N]T: reservar N slots consecutivos; guardar dirección base.
+//   - Caso normal: 1 slot, evaluar expresión inicializadora.
+// =============================================================================
 
 void GenCodeVisitor::visit(VarDec* vd) {
-    // Ignorar declaraciones globales (fuera de función)
-    if (currentFunction.empty()) return;
+    if (currentFunction.empty()) return;  // ignorar globales por ahora
 
+    // ── ¿Es un struct? ────────────────────────────────────────────────────
+    if (vd->tienetipo && vd->tipo) {
+        if (IdType* it = dynamic_cast<IdType*>(vd->tipo)) {
+            auto sit = structFieldOffsets.find(it->id);
+            if (sit != structFieldOffsets.end()) {
+                int nFields = structFieldCount[it->id];
+                // Reservar nFields slots consecutivos
+                int baseSlot = varContador;
+                posicion[vd->nombre] = baseSlot;  // slot del primer campo
+                varContador += nFields;
+                // La dirección base es leaq de ese slot
+                // (se carga con leaq cuando se usa el nombre)
+                // Si hay expresión inicializadora, la ignoramos por ahora
+                // (struct literals son complejos; se asignan campo a campo)
+                return;
+            }
+        }
+        // ── ¿Es un array? ────────────────────────────────────────────────
+        if (ArrayType* at = dynamic_cast<ArrayType*>(vd->tipo)) {
+            // Intentamos obtener el tamaño en tiempo de compilación
+            int arraySize = 8; // tamaño por defecto si no podemos evaluar
+            if (NumberExpDecimal* ne = dynamic_cast<NumberExpDecimal*>(at->exp1))
+                arraySize = ne->value;
+
+            int baseSlot = varContador;
+            posicion[vd->nombre] = baseSlot;
+            varContador += arraySize;
+
+            // Si hay inicializador, lo evaluamos como dirección base
+            if (vd->exp) {
+                vd->exp->accept(this);
+                // El resultado en %rax es la dirección base del array fuente;
+                // copiamos elemento por elemento sería ideal, pero como
+                // simplificación guardamos la dirección en el primer slot.
+                cout << "    movq  %rax, " << offset(vd->nombre) << endl;
+            } else {
+                // Inicializar como puntero a frame local (leaq)
+                cout << "    leaq  " << (baseSlot * -8) << "(%rbp), %rax" << endl;
+                cout << "    movq  %rax, " << offset(vd->nombre) << endl;
+            }
+            return;
+        }
+    }
+
+    // ── Caso general: variable escalar ────────────────────────────────────
     if (posicion.find(vd->nombre) == posicion.end())
         posicion[vd->nombre] = varContador++;
 
     if (vd->exp) {
-        vd->exp->accept(this);                           // resultado en %rax
+        vd->exp->accept(this);
         cout << "    movq  %rax, " << offset(vd->nombre) << endl;
     }
 }
 
 void GenCodeVisitor::visit(ConstDec* cd) {
+    
     if (currentFunction.empty()) return;
 
     if (posicion.find(cd->nombre) == posicion.end())
@@ -164,9 +402,12 @@ void GenCodeVisitor::visit(ConstDec* cd) {
     }
 }
 
-// ── Statements ───────────────────────────────────────────
+// =============================================================================
+//  AsignStmt
+// =============================================================================
 
 void GenCodeVisitor::visit(AsignStmt* stm) {
+    // Llamada de función usada como sentencia
     if (stm->variable == "__call__") {
         if (stm->exp) stm->exp->accept(this);
         return;
@@ -179,80 +420,154 @@ void GenCodeVisitor::visit(AsignStmt* stm) {
     cout << "    movq  %rax, " << offset(stm->variable) << endl;
 }
 
-// ── DerefAssignStmt: *lval = rval ────────────────────────
+// =============================================================================
+//  DerefAssignStmt  — *lval = rval  o  array[idx] = rval  o  struct.campo = rval
 //
-//  Estrategia:
-//    1. Evaluar rval → %rax → pushq (valor a almacenar)
-//    2. Evaluar dirección del lval → %rax
-//       - Si el lval es un UnaryExp DEREF sobre un IdExp, la dirección
-//         del puntero ya está en el frame; la cargamos con leaq/movq.
-//       - Caso general: evaluamos la sub-expresión (que debe dejar la
-//         dirección en %rax) y la movemos a %rcx.
-//    3. popq %rdx  (valor a almacenar)
-//    4. movq %rdx, (%rcx)  (almacenar en la dirección)
+//  Protocolo:
+//    1. eval(rval) → %rax → pushq       (valor a almacenar)
+//    2. calcular dirección del lval → %rcx
+//    3. popq %rdx
+//    4. movq %rdx, (%rcx)
+// =============================================================================
 
 void GenCodeVisitor::visit(DerefAssignStmt* stm) {
-    // Evaluar el lado derecho primero y apilarlo
+    // 1. Evaluar rval y apilar
     stm->rval->accept(this);
-    cout << "    pushq %rax" << endl;   // valor → stack
+    cout << "    pushq %rax" << endl;
 
-    // Obtener la dirección del lval
-    // El lval puede ser:
-    //   - AlgoconcorchetesExp (array[idx]) → necesitamos la dirección del elemento
-    //   - PuntoExp (struct.campo)
-    //   - UnaryExp DEREF (*ptr) → la dirección está en el puntero
-    //   - IdExp (variable simple) → leaq da su dirección en el frame
+    // 2. Calcular dirección del lval
     if (AlgoconcorchetesExp* arr = dynamic_cast<AlgoconcorchetesExp*>(stm->lval)) {
-        // base + idx*8
-        arr->nombre->accept(this);              // base → %rax
-        cout << "    pushq %rax" << endl;
-        arr->dentroexp->accept(this);           // idx  → %rax
-        cout << "    imulq $8, %rax" << endl;   // idx * 8
-        cout << "    popq  %rcx"     << endl;   // base → %rcx
-        cout << "    addq  %rcx, %rax" << endl; // dirección = base + idx*8
+        arr->nombre->accept(this);
+        cout << "    pushq %rax"       << endl;
+        arr->dentroexp->accept(this);
+        cout << "    imulq $8, %rax"   << endl;
+        cout << "    popq  %rcx"       << endl;
+        cout << "    addq  %rcx, %rax" << endl;
+
+    } else if (PuntoExp* pe = dynamic_cast<PuntoExp*>(stm->lval)) {
+        emitStructBaseAddress(pe->exp);
+        int fieldOff = getFieldOffset(pe->exp, pe->id);
+        if (fieldOff != 0)
+            cout << "    addq  $" << fieldOff << ", %rax" << endl;
+
     } else if (UnaryExp* ue = dynamic_cast<UnaryExp*>(stm->lval)) {
-        // *ptr = rval  → la dirección es el valor del puntero
-        ue->exp->accept(this);                  // valor del puntero → %rax
+        // *ptr = val  →  dirección = valor almacenado en ptr
+        ue->exp->accept(this);   // %rax = valor de ptr = dirección destino ✓
+
     } else if (IdExp* id = dynamic_cast<IdExp*>(stm->lval)) {
-        // &id → dirección en el frame
+        // *ptr = val → la dirección destino ES el valor almacenado en ptr
         if (posicion.find(id->value) == posicion.end())
             posicion[id->value] = varContador++;
-        cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
+        // ANTES: leaq (incorrecto, da &ptr)
+        // AHORA: movq (correcto, da *ptr = valor de ptr = dirección de a)
+        cout << "    movq  " << offset(id->value) << ", %rax" << endl;
+
     } else {
-        // Caso general: evaluar el lval (debe dejar dirección en %rax)
         stm->lval->accept(this);
     }
 
-    cout << "    movq  %rax, %rcx"  << endl;   // dirección → %rcx
-    cout << "    popq  %rdx"        << endl;   // valor     → %rdx
-    cout << "    movq  %rdx, (%rcx)" << endl;  // *dirección = valor
+    // 3-4. Almacenar
+    cout << "    movq  %rax, %rcx"   << endl;
+    cout << "    popq  %rdx"         << endl;
+    cout << "    movq  %rdx, (%rcx)" << endl;
 }
-
-// ── PrintStmt ────────────────────────────────────────────
+// =============================================================================
+//  PrintStmt — detección de tipo para elegir formato printf correcto
 //
-//  Detectamos si la expresión es un StringExp para usar %s, y en caso
-//  contrario usamos %ld (entero de 64 bits).
+//  Heurística en tiempo de compilación:
+//   StringExp          → print_str_fmt   (%s)
+//   CharExp            → print_char_fmt  (%c)
+//   BoolExp            → imprime "true"/"false" directamente
+//   NumberExpFlotante  → print_float_fmt (%g)
+//   Cualquier otra     → print_int_fmt   (%ld)
 //
-//  Alineación: salvamos %rsp en %r12 (callee-saved) antes de printf.
+//  Para variables (IdExp) no tenemos información de tipo en el gencode,
+//  así que por defecto usamos %ld.  Si el lenguaje requiere precisión,
+//  el TypeChecker debería propagar esa información hasta aquí.
+// =============================================================================
 
 void GenCodeVisitor::visit(PrintStmt* stm) {
-    bool esString = dynamic_cast<StringExp*>(stm->exp) != nullptr;
+    Exp* e = stm->exp;
 
-    stm->exp->accept(this);                             // valor en %rax
+    // ── Detectar si es una variable global con tipo conocido ──────────────
+    string knownType = "";
+    if (IdExp* id = dynamic_cast<IdExp*>(e)) {
+        auto it = globalTypes.find(id->value);
+        if (it != globalTypes.end())
+            knownType = it->second;
+    }
 
-    cout << "    movq  %rsp, %r12"                     << endl;
-    cout << "    andq  $-16, %rsp"                     << endl;
-    cout << "    movq  %rax, %rsi"                     << endl;
+    // ── Bool global ───────────────────────────────────────────────────────
+    if (knownType == "bool") {
+        // No podemos saber el valor en compile-time; usamos comparación runtime
+        e->accept(this);  // valor (0 o 1) → %rax
+        string labelTrue  = newLabel("bool_true");
+        string labelDone  = newLabel("bool_done");
+        cout << "    cmpq  $0, %rax"         << endl;
+        cout << "    jne   " << labelTrue     << endl;
+        cout << "    leaq  print_bool_false(%rip), %rdi" << endl;
+        cout << "    jmp   " << labelDone     << endl;
+        cout << labelTrue << ":"              << endl;
+        cout << "    leaq  print_bool_true(%rip), %rdi"  << endl;
+        cout << labelDone << ":"              << endl;
+        cout << "    pushq %r12"             << endl;
+        cout << "    movq  %rsp, %r12"       << endl;
+        cout << "    andq  $-16, %rsp"       << endl;
+        cout << "    xorq  %rax, %rax"       << endl;
+        cout << "    call  puts@PLT"         << endl;
+        cout << "    movq  %r12, %rsp"       << endl;
+        cout << "    popq  %r12"             << endl;
+        return;
+    }
 
-    if (esString)
-        cout << "    leaq  print_str_fmt(%rip), %rdi"  << endl;
-    else
-        cout << "    leaq  print_i64_fmt(%rip), %rdi"  << endl;
+    // ── Bool literal (igual que antes) ────────────────────────────────────
+    if (BoolExp* be = dynamic_cast<BoolExp*>(e)) {
+        string lbl = (be->booleano == "true") ? "print_bool_true" : "print_bool_false";
+        cout << "    leaq  " << lbl << "(%rip), %rdi" << endl;
+        cout << "    pushq %r12" << endl;
+        cout << "    movq  %rsp, %r12" << endl;
+        cout << "    andq  $-16, %rsp" << endl;
+        cout << "    xorq  %rax, %rax" << endl;
+        cout << "    call  puts@PLT"   << endl;
+        cout << "    movq  %r12, %rsp" << endl;
+        cout << "    popq  %r12"       << endl;
+        return;
+    }
 
-    cout << "    xorq  %rax, %rax"                     << endl;
-    cout << "    call  printf@PLT"                     << endl;
-    cout << "    movq  %r12, %rsp"                     << endl;
+    // ── Evaluar expresión → %rax ──────────────────────────────────────────
+    e->accept(this);
+
+    cout << "    pushq %r12"       << endl;
+    cout << "    movq  %rsp, %r12" << endl;
+    cout << "    andq  $-16, %rsp" << endl;
+    cout << "    movq  %rax, %rsi" << endl;
+
+    // Elegir formato (primero por tipo global, luego por tipo AST)
+    if (knownType == "float" || dynamic_cast<NumberExpFlotante*>(e)) {
+        cout << "    movq  %rax, %xmm0"                 << endl;
+        cout << "    leaq  print_float_fmt(%rip), %rdi" << endl;
+        cout << "    movq  $1, %rax"                     << endl;
+        cout << "    call  printf@PLT"                   << endl;
+        cout << "    movq  %r12, %rsp"                   << endl;
+        cout << "    popq  %r12"                         << endl;
+        return;
+    } else if (knownType == "str" || dynamic_cast<StringExp*>(e)) {
+        cout << "    leaq  print_str_fmt(%rip), %rdi"   << endl;
+    } else if (knownType == "char" || dynamic_cast<CharExp*>(e)) {
+        cout << "    leaq  print_char_fmt(%rip), %rdi"  << endl;
+    } else {
+        cout << "    leaq  print_int_fmt(%rip), %rdi"   << endl;
+    }
+
+    cout << "    xorq  %rax, %rax"  << endl;
+    cout << "    call  printf@PLT"   << endl;
+    cout << "    movq  %r12, %rsp"   << endl;
+    cout << "    popq  %r12"         << endl;
 }
+
+// =============================================================================
+//  ReturnStm
+// =============================================================================
 
 void GenCodeVisitor::visit(ReturnStm* stm) {
     if (stm->exp)
@@ -263,6 +578,10 @@ void GenCodeVisitor::visit(ReturnStm* stm) {
     cout << "    leave" << endl;
     cout << "    ret"   << endl;
 }
+
+// =============================================================================
+//  IfStmt
+// =============================================================================
 
 void GenCodeVisitor::visit(IfStmt* stm) {
     string labelElse = newLabel("else");
@@ -282,6 +601,10 @@ void GenCodeVisitor::visit(IfStmt* stm) {
     cout << labelEnd << ":" << endl;
 }
 
+// =============================================================================
+//  WhileStmt
+// =============================================================================
+
 void GenCodeVisitor::visit(WhileStmt* stm) {
     string labelStart = newLabel("while_start");
     string labelEnd   = newLabel("while_end");
@@ -292,12 +615,12 @@ void GenCodeVisitor::visit(WhileStmt* stm) {
     currentLoopEnd   = labelEnd;
 
     cout << labelStart << ":" << endl;
-
     stm->condicion->accept(this);
-    cout << "    cmpq  $0, %rax"      << endl;
-    cout << "    je    " << labelEnd  << endl;
+    cout << "    cmpq  $0, %rax"     << endl;
+    cout << "    je    " << labelEnd << endl;
 
-    for (Stmt* s : stm->cuerpodelwhile) s->accept(this);
+    for (Stmt* s : stm->cuerpodelwhile)
+        s->accept(this);
 
     cout << "    jmp   " << labelStart << endl;
     cout << labelEnd << ":"            << endl;
@@ -306,35 +629,28 @@ void GenCodeVisitor::visit(WhileStmt* stm) {
     currentLoopEnd   = prevEnd;
 }
 
-// ── ForStmt ──────────────────────────────────────────────
+// =============================================================================
+//  ForStmt
 //
-//  El parser genera ForStmt con:
-//    asignacion = AsignStmt(var, iterable)   ← iterable es el array/rango
-//    condicion  = NullExp()                  ← placeholder
-//    incremento = AsignStmt(idx, NullExp())  ← placeholder
+//  El parser genera siempre:
+//    asignacion = AsignStmt(elemVar, iterable)
+//    condicion  = NullExp()   → for-each sobre array
+//               = <expr>      → for clásico (raro en este parser)
+//    incremento = AsignStmt(idxVar, NullExp())
 //    cuerpo     = Body
 //
-//  Para un for real sobre un rango 0..N necesitamos saber N.
-//  Dado que el parser usa NullExp como condición, el for clásico
-//  con variable de iteración y condición explícita se maneja aquí:
+//  For-each:
+//    - Carga la dirección base del array en __arr_base__
+//    - Inicializa idxVar = 0
+//    - En cada iteración: elemVar = *(base + idx*8),  idx++
+//    - El bucle es infinito; el usuario usa break para salir,
+//      o bien el array tiene un centinela conocido.
 //
-//  Si la condición es NullExp asumimos que el iterable es el array
-//  y el var es el elemento (for each semántico). En ese caso generamos
-//  un bucle infinito que el usuario debe romper con break.
-//  Si la condición NO es NullExp, generamos un for clásico.
+//  For clásico (condición != NullExp):
+//    init → check → cuerpo → inc → check → ...
+// =============================================================================
 
 void GenCodeVisitor::visit(ForStmt* stm) {
-    // El parser genera ForStmt para  for (iterable) |elem|  y  for (iterable) |elem, idx|
-    // de esta forma:
-    //   asignacion = AsignStmt(elem, iterable)
-    //   condicion  = NullExp()      ← placeholder (no es un for clásico con condición)
-    //   incremento = AsignStmt(idx o __idx__, NullExp())
-    //   cuerpo     = Body
-    //
-    // Detectamos si es un for-each o un for clásico:
-    //   - for-each:  condicion == NullExp  (viene del parser de for)
-    //   - for clásico: condicion != NullExp
-
     bool esForEach = (dynamic_cast<NullExp*>(stm->condicion) != nullptr);
 
     string labelStart = newLabel("for_start");
@@ -346,39 +662,27 @@ void GenCodeVisitor::visit(ForStmt* stm) {
     currentLoopEnd   = labelEnd;
 
     if (esForEach) {
-        // ── For-each: for (arr) |elem|  o  for (arr) |elem, idx| ────────
-        //
-        // Extraemos nombres de elem e idx del AST
         AsignStmt* initStmt = dynamic_cast<AsignStmt*>(stm->asignacion);
         AsignStmt* idxStmt  = dynamic_cast<AsignStmt*>(stm->incremento);
 
         string elemVar = initStmt ? initStmt->variable : "__elem__";
         string idxVar  = idxStmt  ? idxStmt->variable  : "__idx__";
 
-        // Registrar elem e idx en posicion si no existen
         if (posicion.find(elemVar) == posicion.end())
             posicion[elemVar] = varContador++;
         if (posicion.find(idxVar) == posicion.end())
             posicion[idxVar] = varContador++;
 
-        // Registrar variable interna __arr_base__ para guardar la base del array
-        string baseVar = newLabel("__arr_base__");
-        string lenVar  = newLabel("__arr_len__");
+        string baseVar = "__arr_base_" + to_string(labelCounter) + "__";
         posicion[baseVar] = varContador++;
-        posicion[lenVar]  = varContador++;
 
-        // Evaluar el iterable (el array) → %rax = dirección base
-        // El iterable está en initStmt->exp (p.ej. IdExp("arr"))
+        // Evaluar iterable → dirección base del array en %rax
         if (initStmt && initStmt->exp) {
-            // Si arr es una variable declarada, cargamos su dirección (leaq)
-            // Si no está declarada, avisamos y usamos 0
             if (IdExp* id = dynamic_cast<IdExp*>(initStmt->exp)) {
-                if (posicion.find(id->value) != posicion.end()) {
-                    // arr es una variable en el frame: su valor ES la dirección base
+                if (posicion.count(id->value))
                     cout << "    movq  " << offset(id->value) << ", %rax" << endl;
-                } else {
-                    cerr << "[GenCode] Advertencia: iterable no declarado: '"
-                         << id->value << "' — se usará 0" << endl;
+                else {
+                    cerr << "[GenCode] Advertencia: iterable '" << id->value << "' no declarado\n";
                     cout << "    xorq  %rax, %rax" << endl;
                 }
             } else {
@@ -387,49 +691,40 @@ void GenCodeVisitor::visit(ForStmt* stm) {
         } else {
             cout << "    xorq  %rax, %rax" << endl;
         }
-        // Guardar base del array en __arr_base__
         cout << "    movq  %rax, " << offset(baseVar) << endl;
 
-        // Inicializar idx = 0
+        // idx = 0
         cout << "    movq  $0, %rax" << endl;
         cout << "    movq  %rax, " << offset(idxVar) << endl;
 
-        // NOTA: sin información de longitud en tiempo de compilación,
-        // generamos un bucle infinito (el usuario usa break para salir,
-        // o bien el array tiene un centinela). Si el array viene de
-        // malloc con tamaño conocido, habría que pasarlo explícitamente.
-        // Por ahora el bucle corre hasta break o hasta que se salga del scope.
         cout << labelStart << ":" << endl;
 
-        // Cargar elem = arr[idx]
-        cout << "    movq  " << offset(idxVar)  << ", %rax" << endl;  // idx
-        cout << "    movq  " << offset(baseVar) << ", %rcx" << endl;  // base
-        cout << "    movq  (%rcx,%rax,8), %rax" << endl;                // arr[idx]
-        cout << "    movq  %rax, " << offset(elemVar) << endl;           // elem = arr[idx]
+        // elem = base[idx]
+        cout << "    movq  " << offset(idxVar)  << ", %rax" << endl;
+        cout << "    movq  " << offset(baseVar) << ", %rcx" << endl;
+        cout << "    movq  (%rcx,%rax,8), %rax"             << endl;
+        cout << "    movq  %rax, " << offset(elemVar)       << endl;
 
-        // Ejecutar cuerpo
         if (stm->cuerpo) stm->cuerpo->accept(this);
 
-        // idx = idx + 1
+        // idx++
         cout << "    movq  " << offset(idxVar) << ", %rax" << endl;
-        cout << "    addq  $1, %rax" << endl;
-        cout << "    movq  %rax, " << offset(idxVar) << endl;
+        cout << "    addq  $1, %rax"                        << endl;
+        cout << "    movq  %rax, " << offset(idxVar)        << endl;
 
         cout << "    jmp   " << labelStart << endl;
-        cout << labelEnd << ":" << endl;
+        cout << labelEnd << ":"            << endl;
 
     } else {
-        // ── For clásico: for (init; cond; inc) ───────────────────────────
+        // For clásico
         if (stm->asignacion) stm->asignacion->accept(this);
 
         cout << labelStart << ":" << endl;
-
         stm->condicion->accept(this);
         cout << "    cmpq  $0, %rax"     << endl;
-        cout << "    je    " << labelEnd  << endl;
+        cout << "    je    " << labelEnd << endl;
 
         if (stm->cuerpo) stm->cuerpo->accept(this);
-
         if (stm->incremento) stm->incremento->accept(this);
 
         cout << "    jmp   " << labelStart << endl;
@@ -439,6 +734,10 @@ void GenCodeVisitor::visit(ForStmt* stm) {
     currentLoopStart = prevStart;
     currentLoopEnd   = prevEnd;
 }
+
+// =============================================================================
+//  BreakStmt / ContinueStm
+// =============================================================================
 
 void GenCodeVisitor::visit(BreakStmt* stm) {
     if (stm->tiene_valor && stm->valor)
@@ -452,58 +751,65 @@ void GenCodeVisitor::visit(ContinueStm* stm) {
         cout << "    jmp   " << currentLoopStart << endl;
 }
 
-// ── SwitchStmt ───────────────────────────────────────────
+// =============================================================================
+//  SwitchStmt
 //
-//  Patrón:
-//    eval(condicion) → pushq %rax        ; valor del switch en stack
+//  Esquema:
+//    eval(condicion) → pushq %rax       ← valor del switch permanece en stack
 //    para cada caso:
-//      eval(patron)  → %rax
-//      movq %rax, %rcx                   ; patrón → %rcx
-//      movq 0(%rsp), %rax                ; peek valor sin modificar stack
+//      eval(patron) → %rax
+//      movq %rax, %rcx
+//      movq 0(%rsp), %rax              ← peek (no pop)
 //      cmpq %rcx, %rax
 //      jne  siguiente_caso
 //      <body>
-//      addq $8, %rsp                     ; limpiar valor del switch
+//      addq $8, %rsp                   ← pop del valor del switch
 //      jmp  switch_end
-//    default (si existe)
-//    addq $8, %rsp                       ; limpiar valor del switch
+//    [default]
+//    addq $8, %rsp
 //    switch_end:
+// =============================================================================
 
 void GenCodeVisitor::visit(SwitchStmt* stm) {
     string labelEnd = newLabel("switch_end");
 
     stm->condicion->accept(this);
-    cout << "    pushq %rax" << endl;              // valor del switch en stack
+    cout << "    pushq %rax" << endl;
 
     for (auto& caso : stm->casos) {
         string labelNext = newLabel("switch_next");
 
-        caso.first->accept(this);                  // patrón → %rax
-        cout << "    movq  %rax, %rcx"    << endl; // patrón → %rcx
-        cout << "    movq  0(%rsp), %rax" << endl; // peek valor del switch → %rax (sin popq)
-        cout << "    cmpq  %rcx, %rax"   << endl;  // left=valor, right=patrón
+        caso.first->accept(this);
+        cout << "    movq  %rax, %rcx"    << endl;
+        cout << "    movq  0(%rsp), %rax" << endl;
+        cout << "    cmpq  %rcx, %rax"    << endl;
         cout << "    jne   " << labelNext << endl;
 
         caso.second->accept(this);
-        cout << "    addq  $8, %rsp"     << endl;  // limpiar stack
+        cout << "    addq  $8, %rsp"     << endl;
         cout << "    jmp   " << labelEnd << endl;
 
         cout << labelNext << ":"         << endl;
     }
 
-    // Default
     if (stm->default_caso)
         stm->default_caso->accept(this);
 
-    cout << "    addq  $8, %rsp" << endl;          // limpiar valor del switch
+    cout << "    addq  $8, %rsp" << endl;
     cout << labelEnd << ":"      << endl;
 }
+
+// =============================================================================
+//  BodyStmt
+// =============================================================================
 
 void GenCodeVisitor::visit(BodyStmt* stm) {
     if (stm->cuerpo) stm->cuerpo->accept(this);
 }
 
-// ── DeleteStm ────────────────────────────────────────────
+// =============================================================================
+//  DeleteStm (free)
+// =============================================================================
 
 void GenCodeVisitor::visit(DeleteStm* stm) {
     stm->exp->accept(this);
@@ -511,36 +817,33 @@ void GenCodeVisitor::visit(DeleteStm* stm) {
     emitAlignedCall("free@PLT");
 }
 
-// ── DeferStmt / TryStmt — stubs ──────────────────────────
+// =============================================================================
+//  DeferStmt — ejecuta el stmt al salir del scope (simplificación: inline)
+//  En una implementación completa se usaría una lista de cleanup al final
+//  de cada bloque. Aquí lo emitimos inmediatamente (semántica incorrecta
+//  pero permite compilar sin crash).
+// =============================================================================
 
 void GenCodeVisitor::visit(DeferStmt* stm) {
-    // defer necesita cleanup al salir del scope; stub intencional.
-    (void)stm;
+    // TODO: implementar cleanup stack para semántica correcta de defer.
+    // Por ahora emitimos el statement en el lugar (incorrecto pero seguro).
+    if (stm->stmt) stm->stmt->accept(this);
 }
+
+// =============================================================================
+//  TryStmt
+// =============================================================================
 
 void GenCodeVisitor::visit(TryStmt* stm) {
+    // Ejecutar el cuerpo try normalmente.
+    // El manejo real de errores requeriría setjmp/longjmp o similar.
     if (stm->try_body) stm->try_body->accept(this);
+    // El catch se omite (no hay mecanismo de excepción a nivel de C en este stub).
 }
 
-// ── emitAlignedCall (método miembro) ─────────────────────
-//
-//  Alinea %rsp a 16 bytes antes del call y restaura después.
-//  Usamos %r12 (callee-saved) para guardar el %rsp original.
-//  NOTA: no salvamos/restauramos %r12 aquí; se asume que cada función
-//  generada tiene su propio frame y %r12 no es usado por el compilador
-//  para otra cosa en el mismo scope.
-
-void GenCodeVisitor::emitAlignedCall(const string& target) {
-    cout << "    movq  %rsp, %r12"    << endl;
-    cout << "    andq  $-16, %rsp"    << endl;
-    cout << "    xorq  %rax, %rax"    << endl;  // 0 regs XMM (varargs)
-    cout << "    call  " << target    << endl;
-    cout << "    movq  %r12, %rsp"    << endl;
-}
-
-// ═════════════════════════════════════════════════════════
-//   Expresiones
-// ═════════════════════════════════════════════════════════
+// =============================================================================
+//  Expresiones numéricas y literales
+// =============================================================================
 
 Value GenCodeVisitor::visit(NumberExpDecimal* exp) {
     cout << "    movq  $" << exp->value << ", %rax" << endl;
@@ -548,8 +851,10 @@ Value GenCodeVisitor::visit(NumberExpDecimal* exp) {
 }
 
 Value GenCodeVisitor::visit(NumberExpFlotante* exp) {
-    float   f32  = exp->value;
-    double  f64  = (double)f32;
+    // Representamos el float como sus bits de double en %rax.
+    // Para operaciones aritméticas de float habría que mover a %xmm0;
+    // para print lo detectamos en PrintStmt.
+    double  f64  = (double)exp->value;
     int64_t bits = 0;
     memcpy(&bits, &f64, sizeof(bits));
     cout << "    movabsq $" << bits << ", %rax" << endl;
@@ -559,228 +864,6 @@ Value GenCodeVisitor::visit(NumberExpFlotante* exp) {
 Value GenCodeVisitor::visit(BoolExp* exp) {
     int val = (exp->booleano == "true") ? 1 : 0;
     cout << "    movq  $" << val << ", %rax" << endl;
-    return Value();
-}
-
-Value GenCodeVisitor::visit(IdExp* exp) {
-    // Manejo de error.X como constante entera única
-    if (exp->value.size() >= 6 && exp->value.substr(0, 6) == "error.") {
-        if (errorCodes.find(exp->value) == errorCodes.end())
-            errorCodes[exp->value] = (int)errorCodes.size() + 1;
-        cout << "    movq  $" << errorCodes[exp->value] << ", %rax" << endl;
-        return Value();
-    }
-
-    if (posicion.find(exp->value) == posicion.end()) {
-        // Variable no declarada: emitir 0 y advertencia (no crashear)
-        cerr << "[GenCode] Advertencia: variable no declarada: '" << exp->value
-             << "' — se usará 0" << endl;
-        cout << "    xorq  %rax, %rax" << endl;
-        return Value();
-    }
-    cout << "    movq  " << offset(exp->value) << ", %rax" << endl;
-    return Value();
-}
-
-// ── BinaryExp ────────────────────────────────────────────
-//
-//  Después de eval: %rax = left, %rcx = right
-//  AT&T: cmpq src, dst  →  flags para dst − src
-//  Entonces cmpq %rcx, %rax  fija flags para left − right:
-//    setl  → left <  right  ✓
-//    setle → left <= right  ✓
-//    setg  → left >  right  ✓
-//    setge → left >= right  ✓
-//    sete  → left == right  ✓
-//    setne → left != right  ✓
-
-Value GenCodeVisitor::visit(BinaryExp* exp) {
-    exp->left->accept(this);
-    cout << "    pushq %rax"        << endl;   // salvar left
-    exp->right->accept(this);
-    cout << "    movq  %rax, %rcx" << endl;   // right → %rcx
-    cout << "    popq  %rax"       << endl;   // left  → %rax
-
-    switch (exp->op) {
-        case PLUS_OP:
-            cout << "    addq  %rcx, %rax" << endl;
-            break;
-
-        case MINUS_OP:
-            cout << "    subq  %rcx, %rax" << endl;
-            break;
-
-        case MUL_OP:
-            cout << "    imulq %rcx, %rax" << endl;
-            break;
-
-        case DIV_OP:
-            cout << "    cqto"             << endl;
-            cout << "    idivq %rcx"       << endl;
-            break;
-
-        case MODULO_OP:
-            cout << "    cqto"             << endl;
-            cout << "    idivq %rcx"       << endl;
-            cout << "    movq  %rdx, %rax" << endl;  // resto en %rdx
-            break;
-
-        case MENOR:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    setl  %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case MENORI:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    setle %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case MAYOR:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    setg  %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case MAYORI:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    setge %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case IGUALIGUAL:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    sete  %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case DIFERENTE_OP:
-            cout << "    cmpq  %rcx, %rax" << endl;
-            cout << "    setne %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case AND:
-            // &&: true si left != 0 Y right != 0
-            cout << "    testq %rax, %rax"  << endl;
-            cout << "    setne %r10b"        << endl;
-            cout << "    testq %rcx, %rcx"  << endl;
-            cout << "    setne %r11b"        << endl;
-            cout << "    andb  %r11b, %r10b" << endl;
-            cout << "    movzbq %r10b, %rax" << endl;
-            break;
-
-        case OR:
-            // ||: true si left != 0 O right != 0
-            cout << "    orq   %rcx, %rax"  << endl;
-            cout << "    setne %al"          << endl;
-            cout << "    movzbq %al, %rax"   << endl;
-            break;
-
-        case REFERENCIA:  // & bitwise AND
-            cout << "    andq  %rcx, %rax"  << endl;
-            break;
-
-        default:
-            cerr << "[GenCode] Operador binario no soportado (op=" << exp->op << ")" << endl;
-            break;
-    }
-    return Value();
-}
-
-Value GenCodeVisitor::visit(NotExp* exp) {
-    exp->exp->accept(this);
-    cout << "    testq %rax, %rax" << endl;
-    cout << "    sete  %al"         << endl;
-    cout << "    movzbq %al, %rax"  << endl;
-    return Value();
-}
-
-Value GenCodeVisitor::visit(UnaryExp* exp) {
-    switch (exp->op) {
-        case UnaryExp::NEGATE:
-            exp->exp->accept(this);
-            cout << "    negq  %rax" << endl;
-            break;
-
-        case UnaryExp::NOT_OP:
-            exp->exp->accept(this);
-            cout << "    testq %rax, %rax" << endl;
-            cout << "    sete  %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;
-            break;
-
-        case UnaryExp::ADDRESS:
-            // &var: cargamos la dirección efectiva en el frame
-            if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
-                if (posicion.find(id->value) == posicion.end())
-                    posicion[id->value] = varContador++;
-                cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
-            } else {
-                // Para arrays u otras expresiones, evaluar y asumir que
-                // la evaluación ya deja la dirección base en %rax
-                exp->exp->accept(this);
-            }
-            break;
-
-        case UnaryExp::DEREF:
-            // *ptr: desreferenciar
-            exp->exp->accept(this);
-            cout << "    movq  (%rax), %rax" << endl;
-            break;
-    }
-    return Value();
-}
-
-// ── FcallExp ─────────────────────────────────────────────
-//
-//  Convención System V AMD64:
-//    Args 1..6  → %rdi %rsi %rdx %rcx %r8 %r9
-//    Args 7+    → stack en orden inverso
-//
-//  Algoritmo:
-//    1. Evaluar args de derecha a izquierda → apilar todos
-//    2. Mover primeros 6 del stack a registros
-//    3. emitAlignedCall (alinea %rsp, llama, restaura %rsp)
-//    4. Limpiar args 7+ del stack
-
-Value GenCodeVisitor::visit(FcallExp* exp) {
-    // Funciones especiales internas
-    if (exp->nombre == "__try__" || exp->nombre == "__catch__") {
-        if (!exp->argumentos.empty())
-            exp->argumentos[0]->accept(this);
-        return Value();
-    }
-
-    int nArgs      = (int)exp->argumentos.size();
-    int nRegArgs   = min(nArgs, MAX_REG_ARGS);
-    int nStackArgs = max(0, nArgs - MAX_REG_ARGS);
-
-    // Paso 1: evaluar todos los args de derecha a izquierda y apilar
-    for (int i = nArgs - 1; i >= 0; --i) {
-        exp->argumentos[i]->accept(this);
-        cout << "    pushq %rax" << endl;
-    }
-
-    // Paso 2: mover primeros nRegArgs del stack a registros de argumento
-    for (int i = 0; i < nRegArgs; ++i)
-        cout << "    popq  " << argRegs[i] << endl;
-
-    // Paso 3: llamada alineada (los nStackArgs restantes ya están en stack)
-    emitAlignedCall(exp->nombre);
-
-    // Paso 4: limpiar args que quedaron en el stack
-    if (nStackArgs > 0)
-        cout << "    addq  $" << (nStackArgs * 8) << ", %rsp" << endl;
-
-    return Value();
-}
-
-Value GenCodeVisitor::visit(NewExp* exp) {
-    // malloc(8): aloca 8 bytes en el heap
-    cout << "    movq  $8, %rdi" << endl;
-    emitAlignedCall("malloc@PLT");
     return Value();
 }
 
@@ -794,11 +877,6 @@ Value GenCodeVisitor::visit(UndefinedExp* exp) {
     return Value();
 }
 
-// ── StringExp ────────────────────────────────────────────
-//
-//  Acumulamos literales en stringLiterals y emitimos en .rodata al final.
-//  Aquí solo generamos leaq para cargar la dirección.
-
 Value GenCodeVisitor::visit(StringExp* exp) {
     string lbl = internString(exp->valor);
     cout << "    leaq  " << lbl << "(%rip), %rax" << endl;
@@ -810,141 +888,441 @@ Value GenCodeVisitor::visit(CharExp* exp) {
     return Value();
 }
 
-Value GenCodeVisitor::visit(ReferenceExp* exp) {
-    if (exp->exp) {
-        if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
-            if (posicion.find(id->value) == posicion.end())
-                posicion[id->value] = varContador++;
-            cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
-        } else {
+// =============================================================================
+//  IdExp — carga variable del frame o constante de error
+// =============================================================================
+
+Value GenCodeVisitor::visit(IdExp* exp) {
+    // Constantes de error
+    if (exp->value.size() >= 6 && exp->value.substr(0, 6) == "error.") {
+        if (!errorCodes.count(exp->value))
+            errorCodes[exp->value] = (int)errorCodes.size() + 1;
+        cout << "    movq  $" << errorCodes[exp->value] << ", %rax" << endl;
+        return Value();
+    }
+
+    // ── NUEVO: variable global ────────────────────────────────────────────
+    if (globalNames.count(exp->value)) {
+        cout << "    movq  " << exp->value << "(%rip), %rax" << endl;
+        return Value();
+    }
+
+    // Variable local (igual que antes)
+    if (!posicion.count(exp->value)) {
+        cerr << "[GenCode] Advertencia: variable no declarada '"
+             << exp->value << "' → 0\n";
+        cout << "    xorq  %rax, %rax" << endl;
+        return Value();
+    }
+    cout << "    movq  " << offset(exp->value) << ", %rax" << endl;
+    return Value();
+}
+
+// =============================================================================
+//  BinaryExp
+//
+//  Secuencia estándar:
+//    eval(left)  → pushq %rax
+//    eval(right) → %rax
+//    movq %rax, %rcx   ; right → %rcx
+//    popq %rax          ; left  → %rax
+//    OP %rcx, %rax      ; resultado → %rax
+//
+//  AT&T cmpq src, dst  calcula dst - src y fija flags.
+//  Con cmpq %rcx, %rax  →  flags de (left - right):
+//    setl  → left <  right
+//    setle → left <= right
+//    setg  → left >  right
+//    setge → left >= right
+//    sete  → left == right
+//    setne → left != right
+// =============================================================================
+
+Value GenCodeVisitor::visit(BinaryExp* exp) {
+    exp->left->accept(this);
+    cout << "    pushq %rax"         << endl;
+    exp->right->accept(this);
+    cout << "    movq  %rax, %rcx"  << endl;
+    cout << "    popq  %rax"        << endl;
+
+    switch (exp->op) {
+        case PLUS_OP:
+            cout << "    addq  %rcx, %rax"  << endl;
+            break;
+        case MINUS_OP:
+            cout << "    subq  %rcx, %rax"  << endl;
+            break;
+        case MUL_OP:
+            cout << "    imulq %rcx, %rax"  << endl;
+            break;
+        case DIV_OP:
+            cout << "    cqto"              << endl;
+            cout << "    idivq %rcx"        << endl;
+            break;
+        case MODULO_OP:
+            cout << "    cqto"              << endl;
+            cout << "    idivq %rcx"        << endl;
+            cout << "    movq  %rdx, %rax"  << endl;  // resto en %rdx
+            break;
+        case MENOR:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    setl  %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case MENORI:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    setle %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case MAYOR:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    setg  %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case MAYORI:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    setge %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case IGUALIGUAL:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    sete  %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case DIFERENTE_OP:
+            cout << "    cmpq  %rcx, %rax"  << endl;
+            cout << "    setne %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case AND:
+            // &&: true si left != 0 Y right != 0
+            cout << "    testq %rax, %rax"   << endl;
+            cout << "    setne %r10b"         << endl;
+            cout << "    testq %rcx, %rcx"   << endl;
+            cout << "    setne %r11b"         << endl;
+            cout << "    andb  %r11b, %r10b"  << endl;
+            cout << "    movzbq %r10b, %rax"  << endl;
+            break;
+        case OR:
+            // ||: true si left != 0 O right != 0
+            cout << "    orq   %rcx, %rax"   << endl;
+            cout << "    setne %al"           << endl;
+            cout << "    movzbq %al, %rax"    << endl;
+            break;
+        case REFERENCIA:
+            // & bitwise AND
+            cout << "    andq  %rcx, %rax"   << endl;
+            break;
+        case NOT:
+            // ! (unario usado como binario raro, no debería pasar)
+            cout << "    testq %rax, %rax"   << endl;
+            cout << "    sete  %al"           << endl;
+            cout << "    movzbq %al, %rax"    << endl;
+            break;
+        default:
+            cerr << "[GenCode] Operador binario no soportado (op=" << exp->op << ")\n";
+            break;
+    }
+    return Value();
+}
+
+// =============================================================================
+//  NotExp / UnaryExp
+// =============================================================================
+
+Value GenCodeVisitor::visit(NotExp* exp) {
+    if (exp->exp) exp->exp->accept(this);
+    cout << "    testq %rax, %rax"  << endl;
+    cout << "    sete  %al"          << endl;
+    cout << "    movzbq %al, %rax"   << endl;
+    return Value();
+}
+
+Value GenCodeVisitor::visit(UnaryExp* exp) {
+    switch (exp->op) {
+        case UnaryExp::NEGATE:
             exp->exp->accept(this);
+            cout << "    negq  %rax" << endl;
+            break;
+        case UnaryExp::NOT_OP:
+            exp->exp->accept(this);
+            cout << "    testq %rax, %rax"  << endl;
+            cout << "    sete  %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
+            break;
+        case UnaryExp::ADDRESS:
+            if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
+                if (!posicion.count(id->value))
+                    posicion[id->value] = varContador++;
+                cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
+            } else {
+                exp->exp->accept(this);  // ya deja dirección en %rax
+            }
+            break;
+        case UnaryExp::DEREF:
+            exp->exp->accept(this);
+            cout << "    movq  (%rax), %rax" << endl;
+            break;
+    }
+    return Value();
+}
+
+// =============================================================================
+//  FcallExp — llamada a función con convención System V AMD64
+//
+//  Algoritmo:
+//    1. Evaluar argumentos de derecha a izquierda y apilar todos.
+//    2. Mover los primeros min(N,6) del stack a %rdi..%r9.
+//    3. emitAlignedCall.
+//    4. Limpiar argumentos extra del stack (si N > 6).
+// =============================================================================
+
+Value GenCodeVisitor::visit(FcallExp* exp) {
+    // Funciones internas del compilador
+    if (exp->nombre == "__try__" || exp->nombre == "__catch__") {
+        if (!exp->argumentos.empty())
+            exp->argumentos[0]->accept(this);
+        return Value();
+    }
+
+    int nArgs      = (int)exp->argumentos.size();
+    int nRegArgs   = min(nArgs, MAX_REG_ARGS);
+    int nStackArgs = max(0, nArgs - MAX_REG_ARGS);
+
+    // Paso 1: evaluar args de derecha a izquierda y apilar
+    for (int i = nArgs - 1; i >= 0; --i) {
+        exp->argumentos[i]->accept(this);
+        cout << "    pushq %rax" << endl;
+    }
+
+    // Paso 2: mover primeros nRegArgs al stack → registros
+    for (int i = 0; i < nRegArgs; ++i)
+        cout << "    popq  " << argRegs[i] << endl;
+
+    // Paso 3: llamada alineada
+    emitAlignedCall(exp->nombre);
+
+    // Paso 4: limpiar args extra del stack
+    if (nStackArgs > 0)
+        cout << "    addq  $" << (nStackArgs * 8) << ", %rsp" << endl;
+
+    return Value();
+}
+
+// =============================================================================
+//  NewExp — aloca en el heap
+//
+//  Si el tipo es array [N]T → malloc(N * 8)
+//  Si el tipo es struct     → malloc(nFields * 8)
+//  Cualquier otro caso      → malloc(8)
+// =============================================================================
+
+Value GenCodeVisitor::visit(NewExp* exp) {
+    int bytes = 8;
+
+    if (exp->tipo) {
+        if (ArrayType* at = dynamic_cast<ArrayType*>(exp->tipo)) {
+            if (NumberExpDecimal* ne = dynamic_cast<NumberExpDecimal*>(at->exp1))
+                bytes = ne->value * 8;
+            else {
+                at->exp1->accept(this);
+                cout << "    imulq $8, %rax"   << endl;
+                cout << "    movq  %rax, %rdi"  << endl;
+                emitAlignedCall("malloc@PLT");
+                return Value();
+            }
+        } else if (IdType* it = dynamic_cast<IdType*>(exp->tipo)) {
+            auto sit = structFieldCount.find(it->id);
+            if (sit != structFieldCount.end())
+                bytes = sit->second * 8;
+            else
+                bytes = 64 * 8; // ← default generoso para tipos escalares usados como array
         }
     }
+
+    cout << "    movq  $" << bytes << ", %rdi" << endl;
+    emitAlignedCall("malloc@PLT");
     return Value();
 }
 
-Value GenCodeVisitor::visit(PunteroExp* exp) {
-    if (exp->exp) {
+// =============================================================================
+//  ReferenceExp — &expr → dirección
+// =============================================================================
+
+Value GenCodeVisitor::visit(ReferenceExp* exp) {
+    if (!exp->exp) { cout << "    xorq  %rax, %rax" << endl; return Value(); }
+    if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
+        if (!posicion.count(id->value))
+            posicion[id->value] = varContador++;
+        cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
+    } else {
         exp->exp->accept(this);
-        cout << "    movq  (%rax), %rax" << endl;
     }
     return Value();
 }
 
-// ── PuntoExp: acceso a campo de struct ───────────────────
+// =============================================================================
+//  PunteroExp — *ptr → desreferenciar
+// =============================================================================
+
+Value GenCodeVisitor::visit(PunteroExp* exp) {
+    if (!exp->exp) { cout << "    xorq  %rax, %rax" << endl; return Value(); }
+    exp->exp->accept(this);
+    cout << "    movq  (%rax), %rax" << endl;
+    return Value();
+}
+
+// =============================================================================
+//  PuntoExp — acceso a campo de struct: expr.campo
 //
-//  Sin tabla de tipos no conocemos el offset de cada campo.
-//  Generamos la base y dejamos un TODO visible en el output.
-//  Para structs simples con campos de 8 bytes, el primer campo está
-//  en offset 0, el segundo en +8, etc.
+//  Protocolo:
+//    1. Obtener la dirección base del struct (emitStructBaseAddress).
+//    2. Sumar el offset del campo.
+//    3. Cargar el valor: movq offset(%rax), %rax
+//
+//  Para structs en el frame, la variable guarda la dirección base
+//  (puesta ahí en VarDec con leaq).
+//  Para punteros a struct: el valor de la variable es la dirección
+//  del struct en el heap → simplemente usamos ese valor + offset.
+// =============================================================================
 
 Value GenCodeVisitor::visit(PuntoExp* exp) {
     if (exp->id == "__unwrap__") {
-        // optional.? — por ahora devolvemos el valor tal cual
+        // optional.? — devuelve el valor (no verifica null en esta implementación)
         exp->exp->accept(this);
         return Value();
     }
-    // Evaluamos la base (dirección del struct)
-    exp->exp->accept(this);
-    // Sin tabla de structs no podemos calcular el offset real.
-    // Devolvemos el primer campo (offset 0) como aproximación.
-    // TODO: implementar tabla de structs para offsets correctos.
-    cout << "    movq  0(%rax), %rax" << endl;
+
+    // Obtener dirección base del struct en %rax
+    emitStructBaseAddress(exp->exp);
+
+    // Obtener offset del campo
+    int fieldOff = getFieldOffset(exp->exp, exp->id);
+    cout << "    movq  " << fieldOff << "(%rax), %rax" << endl;
     return Value();
 }
 
-// ── AlgoconcorchetesExp: array[index] ────────────────────
+// =============================================================================
+//  AlgoconcorchetesExp — array[index]
 //
-//  Corrección del bug original: la base iba a %rcx pero el modo de
-//  direccionamiento indexed es (%base, %índice, escala), donde:
-//    %rcx = base (dirección del array)
-//    %rax = índice
-//
-//  Secuencia correcta:
-//    1. eval(nombre/base) → %rax → pushq    (dirección del array)
-//    2. eval(dentroexp/índice) → %rax
-//    3. popq %rcx                            (base → %rcx)
-//    4. movq (%rcx, %rax, 8), %rax          (elemento → %rax)
+//  base → %rax → pushq
+//  idx  → %rax
+//  popq %rcx
+//  movq (%rcx, %rax, 8), %rax
+// =============================================================================
 
 Value GenCodeVisitor::visit(AlgoconcorchetesExp* exp) {
-    exp->nombre->accept(this);                          // base → %rax
-    cout << "    pushq %rax"                 << endl;   // salvar base
-    exp->dentroexp->accept(this);                       // índice → %rax
-    cout << "    popq  %rcx"                 << endl;   // base → %rcx
-    cout << "    movq  (%rcx,%rax,8), %rax" << endl;   // elemento → %rax
+    exp->nombre->accept(this);
+    cout << "    pushq %rax"                  << endl;
+    exp->dentroexp->accept(this);
+    cout << "    popq  %rcx"                  << endl;
+    cout << "    movq  (%rcx,%rax,8), %rax"  << endl;
     return Value();
 }
+
+// =============================================================================
+//  AlgoconcorchetesylistaExp — array[a, b, ...]  (multi-índice / 2D)
+//
+//  Implementación básica: trata como acceso 1D con el primer índice.
+//  Para arrays 2D reales habría que conocer el número de columnas.
+// =============================================================================
 
 Value GenCodeVisitor::visit(AlgoconcorchetesylistaExp* exp) {
-    // Array 2D u otro acceso multi-índice: stub
+    if (exp->argumentos.empty()) {
+        exp->nombre->accept(this);
+        return Value();
+    }
+    // Caso 2D: asumimos [fila, col] con nCols desconocido → tratamos como 1D flat
     exp->nombre->accept(this);
+    cout << "    pushq %rax"                 << endl;  // base
+    exp->argumentos[0]->accept(this);                   // primer índice
+    if (exp->argumentos.size() >= 2) {
+        // Para 2D: idx = fila * nCols + col  (nCols desconocido, usamos 0 como fallback)
+        cout << "    pushq %rax"             << endl;  // fila
+        exp->argumentos[1]->accept(this);               // col → %rax
+        cout << "    movq  %rax, %rcx"      << endl;  // col → %rcx
+        cout << "    popq  %rax"            << endl;  // fila → %rax
+        // Sin nCols, no podemos calcular; dejamos fila como índice
+        cout << "    addq  %rcx, %rax"      << endl;  // idx = fila + col (aproximación)
+    }
+    cout << "    popq  %rcx"                << endl;  // base → %rcx
+    cout << "    movq  (%rcx,%rax,8), %rax"<< endl;
     return Value();
 }
+
+// =============================================================================
+//  LambdaExp — closures completos requieren heap; emitimos 0 por ahora
+// =============================================================================
 
 Value GenCodeVisitor::visit(LambdaExp* exp) {
-    // Lambdas con captura necesitan closures; stub retorna 0
+    // Stub: las lambdas necesitan closures con captura del entorno.
+    // Retorna null (0) para no crashear.
     cout << "    xorq  %rax, %rax" << endl;
     return Value();
 }
 
-// ── Tipos — stubs ─────────────────────────────────────────
+// =============================================================================
+//  Tipos — no generan código (solo stubs para satisfacer la interfaz)
+// =============================================================================
 
-void GenCodeVisitor::visit(Template* t) {
-    // Los templates se instancian como funciones concretas ignorando el
-    // parámetro de tipo (T se trata como i64 implícitamente).
-    // El nombre de la función es t->id1, los parámetros reales son
-    // t->id_parametros / t->tipo_parametros, el cuerpo es t->block.
- 
-    string prevFunction  = currentFunction;
-    string prevLoopEnd   = currentLoopEnd;
-    string prevLoopStart = currentLoopStart;
-    auto   prevPosicion  = posicion;
-    int    prevContador  = varContador;
- 
-    currentFunction  = t->id1;
-    currentLoopEnd   = "";
-    currentLoopStart = "";
-    posicion.clear();
-    varContador = 1;
- 
-    // Registrar parámetros (ignoramos el comptime T, solo los parámetros reales)
-    for (size_t i = 0; i < t->id_parametros.size(); ++i)
-        posicion[t->id_parametros[i]] = varContador++;
- 
-    const int FRAME_SLOTS = 64;
-    int frameBytes = alignFrame(FRAME_SLOTS);
- 
-    cout << endl;
-    cout << t->id1 << ":" << endl;
-    cout << "    pushq %rbp"                        << endl;
-    cout << "    movq  %rsp, %rbp"                  << endl;
-    cout << "    subq  $" << frameBytes << ", %rsp" << endl;
- 
-    // Copiar argumentos de registros al stack
-    for (size_t i = 0; i < t->id_parametros.size() && i < (size_t)MAX_REG_ARGS; ++i)
-        cout << "    movq  " << argRegs[i] << ", "
-             << offset(t->id_parametros[i]) << endl;
- 
-    if (t->block) t->block->accept(this);
- 
-    // Epílogo de seguridad
-    cout << "    xorq  %rax, %rax" << endl;
-    cout << "    leave"            << endl;
-    cout << "    ret"              << endl;
- 
-    currentFunction  = prevFunction;
-    currentLoopEnd   = prevLoopEnd;
-    currentLoopStart = prevLoopStart;
-    posicion         = prevPosicion;
-    varContador      = prevContador;
+void GenCodeVisitor::visit(IdType*       t) {}
+void GenCodeVisitor::visit(PointerType*  t) {}
+void GenCodeVisitor::visit(ArrayType*    t) {}
+void GenCodeVisitor::visit(OptionalType* t) {}
+void GenCodeVisitor::visit(ErrorType*    t) {}
+void GenCodeVisitor::visit(UnionType*    t) {}
+void GenCodeVisitor::visit(EnumType*     t) {}
+
+// =============================================================================
+//  Helpers privados
+// =============================================================================
+
+// ── emitStructBaseAddress ────────────────────────────────────────────────────
+//  Deja en %rax la dirección base del struct al que apunta expr.
+//  - Si expr es IdExp: la variable puede ser:
+//      * Struct en frame (variable local de tipo struct): leaq -N*8(%rbp)
+//      * Puntero a struct (heap): movq -N*8(%rbp), %rax  (ya tiene la dir)
+//    Como no tenemos info de tipo aquí, usamos movq (funciona para punteros)
+//    y también para structs en frame si el primer slot guarda la dirección base.
+
+void GenCodeVisitor::emitStructBaseAddress(Exp* expr) {
+    if (IdExp* id = dynamic_cast<IdExp*>(expr)) {
+        if (!posicion.count(id->value)) {
+            cerr << "[GenCode] Advertencia: struct base '" << id->value << "' no declarado\n";
+            cout << "    xorq  %rax, %rax" << endl;
+            return;
+        }
+        // El slot de la variable guarda la dirección base del struct
+        // (puesta por VarDec con leaq, o por new con malloc)
+        cout << "    movq  " << offset(id->value) << ", %rax" << endl;
+    } else {
+        // Expresión más compleja: evaluarla (debe dejar dir en %rax)
+        expr->accept(this);
+    }
 }
 
-void GenCodeVisitor::visit(Structdec*   sd) { }
+// ── getFieldOffset ───────────────────────────────────────────────────────────
+//  Devuelve el byte offset del campo 'fieldName' del struct al que apunta expr.
+//  Busca en structFieldOffsets usando el tipo de la expresión base.
+//  Como no tenemos TypeChecker integrado en GenCode, hacemos una búsqueda
+//  global en todos los structs registrados.
 
-void GenCodeVisitor::visit(IdType*      t)  { }
-void GenCodeVisitor::visit(PointerType* t)  { }
-void GenCodeVisitor::visit(ArrayType*   t)  { }
-void GenCodeVisitor::visit(OptionalType*t)  { }
-void GenCodeVisitor::visit(ErrorType*   t)  { }
-void GenCodeVisitor::visit(UnionType*   t)  { }
-void GenCodeVisitor::visit(EnumType*    t)  { }
+int GenCodeVisitor::getFieldOffset(Exp* base, const string& fieldName) {
+    // Intentar por nombre de variable
+    if (IdExp* id = dynamic_cast<IdExp*>(base)) {
+        // Buscar en todos los structs
+        for (auto& [sname, fields] : structFieldOffsets) {
+            auto it = fields.find(fieldName);
+            if (it != fields.end())
+                return it->second;
+        }
+    }
+    // Si no encontramos, buscar en todos los structs
+    for (auto& [sname, fields] : structFieldOffsets) {
+        auto it = fields.find(fieldName);
+        if (it != fields.end())
+            return it->second;
+    }
+    cerr << "[GenCode] Advertencia: campo '" << fieldName << "' no encontrado → offset 0\n";
+    return 0;
+}

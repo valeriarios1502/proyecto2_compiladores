@@ -1,26 +1,54 @@
-pub fn exprs () i32 {
-  var arr = new i32;
-  var obj = new i32;
+pub fn clasifica (n : i32) void {
+  switch (n) {
+    1 => {
+      print("uno");
+    },
+    2 => {
+      print("dos");
+    },
+    3 => {
+      print("tres");
+    },
+    else => {
+      print("otro");
+    },
+  }
+}
 
-  var a = 1 + 2 * 3 - 4 / 2 % 3;
-  var b = !true && false || true;
-  var c = a == 1 || a != 2 && a < 5;
-  var d = -a;
-  var e = &a;
-  var f = *e;
+pub fn diasemana (d : i32) void {
+  switch (d) {
+    1 => {
+      print("lunes");
+    },
+    2 => {
+      print("martes");
+    },
+    3 => {
+      print("miercoles");
+    },
+    4 => {
+      print("jueves");
+    },
+    5 => {
+      print("viernes");
+    },
+    else => {
+      print("fin de semana");
+    },
+  }
+}
 
-  var campo = obj.x;
-  var idx   = arr[0];
+pub fn main () void {
+  clasifica(1);
+  clasifica(2);
+  clasifica(3);
+  clasifica(5);
 
-  var maybe : ?i32 = null;
-  var val = maybe orelse 0;
-  var unwrapped = maybe.?;
+  diasemana(1);
+  diasemana(3);
+  diasemana(5);
+  diasemana(6);
 
-  var r = try buscar(arr, 3);
-
-  var lam = fn (x : i32) : i32 {
-    return x + 1;
-  };
-
-  return sumar(a, d);
+  var x = 2;
+  clasifica(x);
 }

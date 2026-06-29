@@ -1,9 +1,73 @@
-comptime {
-  var X = 10 * 10;
-  print(X);
+struct Lista {
+  tam : i32;
+  cap : i32;
 }
 
-pub fn ejemplo (comptime N : i32) i32 {
-  var suma = comptime N * 2;
-  return suma;
+const LIMITE : i32 = 100;
+
+fn clamp < type < T > > (v : T, lo : T, hi : T) : T {
+  if (v < lo) then {
+    return lo;
+  } else then {
+    if (v > hi) then {
+      return hi;
+    } else then {
+      return v;
+    }
+  }
+}
+
+pub fn buscarEn (objetivo : i32, arr : i32, tam : i32) i32 {
+  var i = 0;
+  while (i < tam) {
+    var elem = arr[i];
+    if (elem == objetivo) then {
+      return elem;
+    }
+    i = i + 1;
+  }
+  return -1;
+}
+
+pub fn main () void {
+  var arr = new i32;
+  arr[0] = 10;
+  arr[1] = 25;
+  arr[2] = 50;
+  arr[3] = 75;
+  arr[4] = 100;
+
+  var found = buscarEn(25, arr, 5);
+  print(found);
+
+  var notfound = buscarEn(99, arr, 5);
+  print(notfound);
+
+  var c1 = clamp(3, 5, 50);
+  print(c1);
+
+  var c2 = clamp(30, 5, 50);
+  print(c2);
+
+  var c3 = clamp(80, 5, 50);
+  print(c3);
+
+  switch (found) {
+    25 => {
+      print("veinticinco");
+    },
+    else => {
+      print("otro valor");
+    },
+  }
+
+  var i = 0;
+  while (i < 5) {
+    var v = clamp(arr[i], 20, 60);
+    print(v);
+    i = i + 1;
+  }
+
+  defer free arr;
+  return;
 }

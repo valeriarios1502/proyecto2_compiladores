@@ -1,27 +1,48 @@
-pub fn control () void {
-  var i = 0;
+pub fn sumar (a : i32, b : i32) i32 {
+  return a + b;
+}
+
+pub fn exprs () void {
+  var a = 1 + 2 * 3 - 4 / 2;
+  print(a);
+
+  var b = 10 % 3;
+  print(b);
+
+  var c = a == 6;
+  print(c);
+
+  var d = a != 99;
+  print(d);
+
+  var e = a > 5;
+  print(e);
+
+  var f = a < 100;
+  print(f);
+
+  var g = -a;
+  print(g);
+
+  var ptr = &a;
+  var val = *ptr;
+  print(val);
+
+  *ptr = 999;
+  print(a);
+
   var arr = new i32;
-  arr[0] = 10;
-  arr[1] = 20;
-  arr[2] = 30;
-  var len = 3;
+  arr[0] = 100;
+  arr[1] = 200;
+  arr[2] = 300;
+  print(arr[0]);
+  print(arr[1]);
+  print(arr[2]);
 
-   if (i == 0) then {
-    print("cero");
-    } else then {
-    print("no cero");
-    }
-
-  for (arr) |elem, idx| {
-    if (idx == len) then {
-      break;
-    }
-    print(elem);
-  }
-
-  return;
+  var r = sumar(a, 1);
+  print(r);
 }
 
 pub fn main () void {
-  control();
+  exprs();
 }

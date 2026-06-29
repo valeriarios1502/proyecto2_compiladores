@@ -7,7 +7,7 @@ fn maximo < type < T > > (a : T, b : T) : T {
 }
 
 fn swap < type < T > > (a : *T, b : *T) : void {
-  var tmp : T = *a;
+  var tmp = *a;
   *a = *b;
   *b = tmp;
 }
@@ -15,12 +15,22 @@ fn swap < type < T > > (a : *T, b : *T) : void {
 pub fn main () void {
   var x = maximo(3, 7);
   print(x);
+
   var y = maximo(10, 2);
   print(y);
+
+  var z = maximo(100, 99);
+  print(z);
 
   var a = 5;
   var b = 9;
   swap(&a, &b);
   print(a);
   print(b);
+
+  var c = 42;
+  var d = 0;
+  swap(&c, &d);
+  print(c);
+  print(d);
 }

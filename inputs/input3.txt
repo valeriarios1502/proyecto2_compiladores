@@ -6,25 +6,25 @@ pub fn sumar (a : i32, b : i32) i32 {
   return a + b;
 }
 
-pub fn identidad (comptime T : type, v : T) T {
-  return v;
-}
-
-pub fn buscar (arr : [10]i32, n : i32) ?i32 {
+pub fn buscar (arr : i32, n : i32) i32 {
   var i = 0;
   while (i < n) {
-    if (arr[i] == n) then {
-      return arr[i];
-    }
     i = i + 1;
   }
-  return null;
+  return i;
 }
 
 pub fn main () void {
   saludar();
+
   var r = sumar(3, 4);
   print(r);
+
+  var r2 = sumar(10, 20);
+  print(r2);
+
+  var r3 = sumar(100, 200);
+  print(r3);
 
   var arr = new i32;
   arr[0] = 10;
@@ -33,6 +33,9 @@ pub fn main () void {
   arr[3] = 40;
   arr[4] = 50;
 
-  var r1 = buscar(arr, 30);
-  print(r1);
+  var i = 0;
+  while (i < 5) {
+    print(arr[i]);
+    i = i + 1;
+  }
 }

@@ -1,21 +1,43 @@
 struct Punto {
   x : i32;
   y : i32;
-  z : f64;
+  z : i32;
 }
 
 struct Nodo {
   valor : i32;
-  siguiente : *Nodo;
+  siguiente : i32;
 }
 
-union Forma (Tag) {
-  circulo : f64;
+union Forma {
+  circulo : i32;
   rectangulo : i32;
 }
 
 union Color {
-  r : u8;
-  g : u8;
-  b : u8;
+  r : i32;
+  g : i32;
+  b : i32;
+}
+
+pub fn main () void {
+  var p = new Punto;
+  p.x = 10;
+  p.y = 20;
+  p.z = 30;
+  print(p.x);
+  print(p.y);
+  print(p.z);
+
+  var n = new Nodo;
+  n.valor = 99;
+  print(n.valor);
+
+  var color = new Color;
+  color.r = 255;
+  color.g = 128;
+  color.b = 0;
+  print(color.r);
+  print(color.g);
+  print(color.b);
 }

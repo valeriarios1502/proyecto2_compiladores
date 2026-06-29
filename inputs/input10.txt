@@ -1,56 +1,129 @@
-struct Lista {
-  datos : [100]i32;
-  tam   : i32;
+struct Punto {
+  x : i32;
+  y : i32;
 }
 
-const LIMITE : i32 = 100;
+struct Rect {
+  ox : i32;
+  oy : i32;
+  w  : i32;
+  h  : i32;
+}
 
-fn clamp < type < T > > (v : T, lo : T, hi : T) : T {
-  if (v < lo) then {
-    return lo;
+pub fn factorial (n : i32) i32 {
+  if (n <= 1) then {
+    return 1;
   } else then {
-    if (v > hi) then {
-      return hi;
-    } else then {
-      return v;
-    }
+    return n * factorial(n - 1);
   }
 }
 
-pub fn buscarEn (lista : Lista, objetivo : i32) ?i32 {
-  var i = 0;
-  while (i < lista.tam) {
-    var elem = lista.datos[i];
-    if (elem == objetivo) then {
-      return elem;
-    }
-    i = i + 1;
+pub fn fibonacci (n : i32) i32 {
+  if (n <= 1) then {
+    return n;
+  } else then {
+    return fibonacci(n - 1) + fibonacci(n - 2);
   }
-  return null;
+}
+
+pub fn area (w : i32, h : i32) i32 {
+  return w * h;
+}
+
+pub fn maximo (a : i32, b : i32) i32 {
+  if (a > b) then {
+    return a;
+  } else then {
+    return b;
+  }
+}
+
+pub fn minimo (a : i32, b : i32) i32 {
+  if (a < b) then {
+    return a;
+  } else then {
+    return b;
+  }
+}
+
+pub fn abs (n : i32) i32 {
+  if (n < 0) then {
+    return -n;
+  } else then {
+    return n;
+  }
 }
 
 pub fn main () void {
-  var lista = new Lista;
-  lista.tam = 5;
-  lista.datos[0] = 10;
+  var f5 = factorial(5);
+  print(f5);
 
-  var encontrado : ?i32 = buscarEn(lista, 10);
-  var valor = encontrado orelse -1;
+  var f10 = factorial(10);
+  print(f10);
 
-  switch (valor) {
-    10 => {
-      print("encontrado");
-    },
-    else => {
-      print("no encontrado");
-    },
+  var fib7 = fibonacci(7);
+  print(fib7);
+
+  var fib10 = fibonacci(10);
+  print(fib10);
+
+  var p = new Punto;
+  p.x = 3;
+  p.y = 4;
+  print(p.x);
+  print(p.y);
+
+  var r = new Rect;
+  r.ox = 0;
+  r.oy = 0;
+  r.w = 10;
+  r.h = 5;
+  var a = area(r.w, r.h);
+  print(a);
+
+  var mx = maximo(p.x, p.y);
+  print(mx);
+
+  var mn = minimo(p.x, p.y);
+  print(mn);
+
+  var v = abs(-42);
+  print(v);
+
+  var arr = new i32;
+  arr[0] = 5;
+  arr[1] = 3;
+  arr[2] = 8;
+  arr[3] = 1;
+  arr[4] = 9;
+
+  var i = 0;
+  while (i < 5) {
+    switch (arr[i]) {
+      1 => {
+        print("uno");
+      },
+      3 => {
+        print("tres");
+      },
+      5 => {
+        print("cinco");
+      },
+      8 => {
+        print("ocho");
+      },
+      9 => {
+        print("nueve");
+      },
+      else => {
+        print("otro");
+      },
+    }
+    i = i + 1;
   }
 
-  for (lista.datos) |elem, idx| {
-    var c = clamp(elem, 5, 50);
-    print(c);
-  }
-
-  defer free lista;
+  defer free p;
+  defer free r;
+  defer free arr;
   return;
 }

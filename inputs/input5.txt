@@ -1,7 +1,45 @@
-var opt  : ?i32      = null;
-var ptr  : *f64      = undefined;
-var arr  : [8]i32    = undefined;
-var mat  : [4][4]f64 = undefined;
-var err  : !i32      = undefined;
-var merr : MyError!i32 = undefined;
-var popt : ?*i32     = null;
+pub fn control () void {
+  var i = 0;
+
+  if (i == 0) then {
+    print("cero");
+  } else then {
+    print("no cero");
+  }
+
+  var arr = new i32;
+  arr[0] = 10;
+  arr[1] = 20;
+  arr[2] = 30;
+  arr[3] = 40;
+  arr[4] = 50;
+
+  var j = 0;
+  while (j < 5) {
+    print(arr[j]);
+    j = j + 1;
+  }
+
+  var suma = 0;
+  var k = 1;
+  while (k <= 10) {
+    suma = suma + k;
+    k = k + 1;
+  }
+  print(suma);
+
+  var n = 0;
+  while (n < 10) {
+    if (n == 5) then {
+      break;
+    }
+    n = n + 1;
+  }
+  print(n);
+
+  return;
+}
+
+pub fn main () void {
+  control();
+}

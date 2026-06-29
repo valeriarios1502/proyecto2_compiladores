@@ -1,12 +1,13 @@
 === STDOUT ===
 Parseo exitoso
 .section .data
-print_i32_fmt:  .string "%d\n"
-print_i64_fmt:  .string "%ld\n"
-print_u64_fmt:  .string "%lu\n"
-print_f32_fmt:  .string "%f\n"
-print_f64_fmt:  .string "%g\n"
-print_str_fmt:  .string "%s\n"
+print_int_fmt:   .string "%ld\n"
+print_uint_fmt:  .string "%lu\n"
+print_float_fmt: .string "%g\n"
+print_str_fmt:   .string "%s\n"
+print_char_fmt:  .string "%c\n"
+print_bool_true: .string "true\n"
+print_bool_false:.string "false\n"
 
 .section .text
 .globl main
@@ -14,7 +15,7 @@ print_str_fmt:  .string "%s\n"
 maximo:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $512, %rsp
+    subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  -8(%rbp), %rax
@@ -43,7 +44,7 @@ endif_1:
 swap:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $512, %rsp
+    subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  -8(%rbp), %rax
@@ -52,13 +53,13 @@ swap:
     movq  -16(%rbp), %rax
     movq  (%rax), %rax
     pushq %rax
-    leaq  -8(%rbp), %rax
+    movq  -8(%rbp), %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
     movq  -24(%rbp), %rax
     pushq %rax
-    leaq  -16(%rbp), %rax
+    movq  -16(%rbp), %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
@@ -69,78 +70,153 @@ swap:
 main:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $512, %rsp
+    subq  $1024, %rsp
     movq  $7, %rax
     pushq %rax
     movq  $3, %rax
     pushq %rax
     popq  %rdi
     popq  %rsi
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     xorq  %rax, %rax
     call  maximo
     movq  %r12, %rsp
+    popq  %r12
     movq  %rax, -8(%rbp)
     movq  -8(%rbp), %rax
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_int_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
+    popq  %r12
     movq  $2, %rax
     pushq %rax
     movq  $10, %rax
     pushq %rax
     popq  %rdi
     popq  %rsi
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     xorq  %rax, %rax
     call  maximo
     movq  %r12, %rsp
+    popq  %r12
     movq  %rax, -16(%rbp)
     movq  -16(%rbp), %rax
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_int_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    movq  $5, %rax
-    movq  %rax, -24(%rbp)
-    movq  $9, %rax
-    movq  %rax, -32(%rbp)
-    leaq  -32(%rbp), %rax
+    popq  %r12
+    movq  $99, %rax
     pushq %rax
-    leaq  -24(%rbp), %rax
+    movq  $100, %rax
     pushq %rax
     popq  %rdi
     popq  %rsi
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  maximo
+    movq  %r12, %rsp
+    popq  %r12
+    movq  %rax, -24(%rbp)
+    movq  -24(%rbp), %rax
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_int_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %r12
+    movq  $5, %rax
+    movq  %rax, -32(%rbp)
+    movq  $9, %rax
+    movq  %rax, -40(%rbp)
+    leaq  -40(%rbp), %rax
+    pushq %rax
+    leaq  -32(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     xorq  %rax, %rax
     call  swap
     movq  %r12, %rsp
-    movq  -24(%rbp), %rax
-    movq  %rsp, %r12
-    andq  $-16, %rsp
-    movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
-    xorq  %rax, %rax
-    call  printf@PLT
-    movq  %r12, %rsp
+    popq  %r12
     movq  -32(%rbp), %rax
+    pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_int_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
+    popq  %r12
+    movq  -40(%rbp), %rax
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_int_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %r12
+    movq  $42, %rax
+    movq  %rax, -48(%rbp)
+    movq  $0, %rax
+    movq  %rax, -56(%rbp)
+    leaq  -56(%rbp), %rax
+    pushq %rax
+    leaq  -48(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  swap
+    movq  %r12, %rsp
+    popq  %r12
+    movq  -48(%rbp), %rax
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_int_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %r12
+    movq  -56(%rbp), %rax
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_int_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %r12
     xorq  %rax, %rax
     leave
     ret
