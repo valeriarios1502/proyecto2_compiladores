@@ -67,7 +67,7 @@ buscarEn:
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  %rdx, -24(%rbp)
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -32(%rbp)
 while_start_4:
     movq  -32(%rbp), %rax
@@ -86,7 +86,6 @@ while_start_4:
     popq  %rcx
     movq  (%rcx,%rax,8), %rax
     movq  %rax, -40(%rbp)
-    movq  -40(%rbp), %rax
     pushq %rax
     movq  -8(%rbp), %rax
     movq  %rax, %rcx
@@ -136,7 +135,7 @@ main:
     pushq %rax
     movq  -8(%rbp), %rax
     pushq %rax
-    movq  $0, %rax
+    xorq  %rax, %rax
     imulq $8, %rax
     popq  %rcx
     addq  %rcx, %rax
@@ -191,9 +190,7 @@ main:
     pushq %rax
     movq  -8(%rbp), %rax
     pushq %rax
-    movq  $25, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $25, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -204,7 +201,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -16(%rbp)
-    movq  -16(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -218,9 +214,7 @@ main:
     pushq %rax
     movq  -8(%rbp), %rax
     pushq %rax
-    movq  $99, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $99, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -231,7 +225,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -24(%rbp)
-    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -245,9 +238,7 @@ main:
     pushq %rax
     movq  $5, %rax
     pushq %rax
-    movq  $3, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $3, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -258,7 +249,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -32(%rbp)
-    movq  -32(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -272,9 +262,7 @@ main:
     pushq %rax
     movq  $5, %rax
     pushq %rax
-    movq  $30, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $30, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -285,7 +273,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -40(%rbp)
-    movq  -40(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -299,9 +286,7 @@ main:
     pushq %rax
     movq  $5, %rax
     pushq %rax
-    movq  $80, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $80, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -312,7 +297,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -48(%rbp)
-    movq  -48(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -354,7 +338,7 @@ switch_next_9:
     popq  %r12
     addq  $8, %rsp
 switch_end_8:
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -56(%rbp)
 while_start_12:
     movq  -56(%rbp), %rax
@@ -376,8 +360,7 @@ while_start_12:
     movq  -56(%rbp), %rax
     popq  %rcx
     movq  (%rcx,%rax,8), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     popq  %rdx
     pushq %r12
@@ -388,7 +371,6 @@ while_start_12:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -64(%rbp)
-    movq  -64(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -426,7 +408,5 @@ while_end_13:
 .section .rodata
 LC_10: .string "veinticinco"
 LC_11: .string "otro valor"
-
-.section .note.GNU-stack,"",@progbits
 
 === STDERR ===

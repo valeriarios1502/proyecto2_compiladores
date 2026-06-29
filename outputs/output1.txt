@@ -142,6 +142,4 @@ bool_done_2:
 .section .rodata
 LC_0: .string "hola mundo"
 
-.section .note.GNU-stack,"",@progbits
-
 === STDERR ===

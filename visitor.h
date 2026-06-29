@@ -8,6 +8,9 @@
 #include <string>
 #include <vector>
 #include "environment.h"
+#include "ConstantFoldingVisitor.h"
+#include "Sethi-UllmanVisitor.h"
+#include "PeepholeVisitor.h"
 
 // ── forward declarations ──────────────────────────────────────────────────────
 class BinaryExp;
@@ -149,6 +152,8 @@ public:
 class GenCodeVisitor : public Visitor {
 public:
     bool hayComptimeGlobal = false;
+    ConstMap constMap;   // llenado por ConstantFoldingPass
+    ShuMap   shuMap;     // llenado por SethiUllmanPass
 
     std::unordered_map<std::string, std::string> globalTypes; // nombre → "int"|"float"|"str"|"char"|"bool"
     std::unordered_set<std::string> globalNames;  

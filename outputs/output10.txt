@@ -40,8 +40,7 @@ else_0:
     movq  %rax, %rcx
     popq  %rax
     subq  %rcx, %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -85,8 +84,7 @@ else_2:
     movq  %rax, %rcx
     popq  %rax
     subq  %rcx, %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -101,8 +99,7 @@ else_2:
     movq  %rax, %rcx
     popq  %rax
     subq  %rcx, %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -203,7 +200,7 @@ abs:
     movq  %rdi, -8(%rbp)
     movq  -8(%rbp), %rax
     pushq %rax
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, %rcx
     popq  %rax
     cmpq  %rcx, %rax
@@ -229,9 +226,7 @@ main:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $5, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $5, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -240,7 +235,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -8(%rbp)
-    movq  -8(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -250,9 +244,7 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $10, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $10, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -261,7 +253,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -16(%rbp)
-    movq  -16(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -271,9 +262,7 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $7, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $7, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -282,7 +271,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -24(%rbp)
-    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -292,9 +280,7 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $10, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $10, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -303,7 +289,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -32(%rbp)
-    movq  -32(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -335,7 +320,6 @@ main:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
     pushq %r12
     movq  %rsp, %r12
@@ -346,7 +330,6 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %r12
     movq  %rsp, %r12
@@ -366,13 +349,13 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -48(%rbp)
-    movq  $0, %rax
+    xorq  %rax, %rax
     pushq %rax
     movq  -48(%rbp), %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    movq  $0, %rax
+    xorq  %rax, %rax
     pushq %rax
     movq  -48(%rbp), %rax
     addq  $8, %rax
@@ -393,13 +376,10 @@ main:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    movq  -48(%rbp), %rax
     movq  24(%rax), %rax
     pushq %rax
-    movq  -48(%rbp), %rax
     movq  16(%rax), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -409,7 +389,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -56(%rbp)
-    movq  -56(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -419,13 +398,10 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %rax
-    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -435,7 +411,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -64(%rbp)
-    movq  -64(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -445,13 +420,10 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %rax
-    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -461,7 +433,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -72(%rbp)
-    movq  -72(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -473,8 +444,7 @@ main:
     popq  %r12
     movq  $42, %rax
     negq  %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -483,7 +453,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -80(%rbp)
-    movq  -80(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -506,7 +475,7 @@ main:
     pushq %rax
     movq  -88(%rbp), %rax
     pushq %rax
-    movq  $0, %rax
+    xorq  %rax, %rax
     imulq $8, %rax
     popq  %rcx
     addq  %rcx, %rax
@@ -557,7 +526,7 @@ main:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -96(%rbp)
 while_start_10:
     movq  -96(%rbp), %rax
@@ -728,7 +697,5 @@ LC_18: .string "cinco"
 LC_20: .string "ocho"
 LC_22: .string "nueve"
 LC_23: .string "otro"
-
-.section .note.GNU-stack,"",@progbits
 
 === STDERR ===

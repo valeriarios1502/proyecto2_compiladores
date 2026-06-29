@@ -7,6 +7,10 @@
 #include "ast.h"
 #include "visitor.h"
 #include <cstdint>
+#include "ConstantFoldingVisitor.h"
+#include "Sethi-UllmanVisitor.h"
+#include "DeadcodeeliminationVisitor.h"
+#include "PeepholeVisitor.h"
 
 using namespace std;
 
@@ -117,6 +121,24 @@ void GenCodeVisitor::emitGlobalConstDec(ConstDec* cd) {
 // =============================================================================
 
 void GenCodeVisitor::gencode(Programa* programa) {
+
+
+ConstantFoldingPass cf;
+cf.run(programa);
+
+
+   DeadCodeEliminationPass dce;
+    dce.run(programa, constMap);
+
+    // ── Pase de Sethi-Ullman ───────────────────────────────────────────
+    SethiUllmanPass su;
+su.run(programa);
+
+    std::ostringstream asmBuffer;
+    std::streambuf* realCoutBuf = std::cout.rdbuf(asmBuffer.rdbuf());
+
+
+
     // ── Pase 0: pre-registrar structs para conocer offsets de campos ──────
     for (Top_dec* d : programa->declist) {
         if (Structdec* sd = dynamic_cast<Structdec*>(d)) {
@@ -173,9 +195,11 @@ void GenCodeVisitor::gencode(Programa* programa) {
             cout << p.first << ": .string \"" << escapeString(p.second) << "\"" << endl;
     }
 
-    // ── Marca de stack no ejecutable ──────────────────────────────────────
-    cout << endl;
-    cout << ".section .note.GNU-stack,\"\",@progbits" << endl;
+    // ★ PASO 2: restaurar cout y pasar por Peephole (SEGUNDO CAMBIO, al final)
+    std::cout.rdbuf(realCoutBuf);
+    PeepholePass pp;
+    pp.optimize(asmBuffer.str(), std::cout);
+
 }
 
 // =============================================================================
@@ -937,14 +961,77 @@ Value GenCodeVisitor::visit(IdExp* exp) {
 //    sete  → left == right
 //    setne → left != right
 // =============================================================================
-
 Value GenCodeVisitor::visit(BinaryExp* exp) {
-    exp->left->accept(this);
-    cout << "    pushq %rax"         << endl;
-    exp->right->accept(this);
-    cout << "    movq  %rax, %rcx"  << endl;
-    cout << "    popq  %rax"        << endl;
-
+ 
+    // ─────────────────────────────────────────────────────────────────────
+    // 1. CONSTANT FOLDING
+    //    Si el nodo completo fue evaluado en compile-time, emitimos un único
+    //    movq con el valor pre-calculado. Cero instrucciones aritméticas.
+    // ─────────────────────────────────────────────────────────────────────
+    auto cfIt = constMap.find(exp);
+    if (cfIt != constMap.end() && cfIt->second.isConst) {
+        // Resultado entero (la mayoría de casos en minizig)
+        long long ival = (long long)cfIt->second.value;
+        cout << "    movq  $" << ival << ", %rax" << endl;
+        return Value();
+    }
+ 
+    // ─────────────────────────────────────────────────────────────────────
+    // 2. SETHI-ULLMAN — determinar el orden de evaluación óptimo
+    //
+    //    Consultamos los labels calculados por SethiUllmanPass:
+    //      · Si label(right) > label(left) → right primero
+    //      · Si right es hoja constante    → no hay pushq, va directo a %rcx
+    //      · Caso general                  → left primero
+    // ─────────────────────────────────────────────────────────────────────
+    int lLabel = 1, rLabel = 1;
+    bool rIsConst = false;
+ 
+    auto lIt = shuMap.find(exp->left);
+    auto rIt = shuMap.find(exp->right);
+    if (lIt != shuMap.end()) lLabel   = lIt->second.label;
+    if (rIt != shuMap.end()) rLabel   = rIt->second.label;
+    if (rIt != shuMap.end()) rIsConst = rIt->second.isConst;
+ 
+    // ── Caso A: right es constante → emitir left; usar inmediato ──────────
+    //    No necesitamos pushq/popq: left → %rax, right → %rcx directamente.
+    if (rIsConst) {
+        // Verificamos que también tenemos el valor en constMap
+        auto rcfIt = constMap.find(exp->right);
+        if (rcfIt != constMap.end() && rcfIt->second.isConst) {
+            long long rval = (long long)rcfIt->second.value;
+            exp->left->accept(this);                                     // left → %rax
+            cout << "    movq  $" << rval << ", %rcx" << endl;          // right como inmediato
+            goto emit_op;
+        }
+    }
+ 
+    // ── Caso B: right más costoso → evaluar right primero ─────────────────
+    //    Guardamos right en el stack, evaluamos left, recuperamos right.
+    if (rLabel > lLabel) {
+        exp->right->accept(this);
+        cout << "    pushq %rax"         << endl;  // right al stack
+        exp->left->accept(this);
+        cout << "    movq  %rax, %rcx"   << endl;  // left  → %rcx (temporal)
+        cout << "    popq  %rax"         << endl;  // right → %rax
+        cout << "    xchgq %rax, %rcx"   << endl;  // left  → %rax, right → %rcx
+        goto emit_op;
+    }
+ 
+    // ── Caso C: left primero (orden natural) ──────────────────────────────
+    {
+        exp->left->accept(this);
+        cout << "    pushq %rax"        << endl;
+        exp->right->accept(this);
+        cout << "    movq  %rax, %rcx"  << endl;
+        cout << "    popq  %rax"        << endl;
+    }
+ 
+emit_op:
+    // ─────────────────────────────────────────────────────────────────────
+    // 3. EMISIÓN DE LA OPERACIÓN
+    //    Aquí %rax = left, %rcx = right (invariante AT&T: op src, dst)
+    // ─────────────────────────────────────────────────────────────────────
     switch (exp->op) {
         case PLUS_OP:
             cout << "    addq  %rcx, %rax"  << endl;
@@ -995,7 +1082,6 @@ Value GenCodeVisitor::visit(BinaryExp* exp) {
             cout << "    movzbq %al, %rax"   << endl;
             break;
         case AND:
-            // &&: true si left != 0 Y right != 0
             cout << "    testq %rax, %rax"   << endl;
             cout << "    setne %r10b"         << endl;
             cout << "    testq %rcx, %rcx"   << endl;
@@ -1004,20 +1090,12 @@ Value GenCodeVisitor::visit(BinaryExp* exp) {
             cout << "    movzbq %r10b, %rax"  << endl;
             break;
         case OR:
-            // ||: true si left != 0 O right != 0
             cout << "    orq   %rcx, %rax"   << endl;
             cout << "    setne %al"           << endl;
             cout << "    movzbq %al, %rax"    << endl;
             break;
         case REFERENCIA:
-            // & bitwise AND
             cout << "    andq  %rcx, %rax"   << endl;
-            break;
-        case NOT:
-            // ! (unario usado como binario raro, no debería pasar)
-            cout << "    testq %rax, %rax"   << endl;
-            cout << "    sete  %al"           << endl;
-            cout << "    movzbq %al, %rax"    << endl;
             break;
         default:
             cerr << "[GenCode] Operador binario no soportado (op=" << exp->op << ")\n";
@@ -1025,7 +1103,6 @@ Value GenCodeVisitor::visit(BinaryExp* exp) {
     }
     return Value();
 }
-
 // =============================================================================
 //  NotExp / UnaryExp
 // =============================================================================

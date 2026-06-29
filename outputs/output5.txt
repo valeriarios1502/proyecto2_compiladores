@@ -16,11 +16,10 @@ control:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -8(%rbp)
-    movq  -8(%rbp), %rax
     pushq %rax
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, %rcx
     popq  %rax
     cmpq  %rcx, %rax
@@ -64,7 +63,7 @@ endif_1:
     pushq %rax
     movq  -16(%rbp), %rax
     pushq %rax
-    movq  $0, %rax
+    xorq  %rax, %rax
     imulq $8, %rax
     popq  %rcx
     addq  %rcx, %rax
@@ -115,7 +114,7 @@ endif_1:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -24(%rbp)
 while_start_4:
     movq  -24(%rbp), %rax
@@ -151,10 +150,9 @@ while_start_4:
     movq  %rax, -24(%rbp)
     jmp   while_start_4
 while_end_5:
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -32(%rbp)
-    movq  $1, %rax
-    movq  %rax, -40(%rbp)
+    movq  $1, -40(%rbp)
 while_start_6:
     movq  -40(%rbp), %rax
     pushq %rax
@@ -192,7 +190,7 @@ while_end_7:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -48(%rbp)
 while_start_8:
     movq  -48(%rbp), %rax
@@ -263,7 +261,5 @@ main:
 .section .rodata
 LC_2: .string "cero"
 LC_3: .string "no cero"
-
-.section .note.GNU-stack,"",@progbits
 
 === STDERR ===

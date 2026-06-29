@@ -47,10 +47,8 @@ swap:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
     movq  (%rax), %rax
     movq  %rax, -24(%rbp)
-    movq  -16(%rbp), %rax
     movq  (%rax), %rax
     pushq %rax
     movq  -8(%rbp), %rax
@@ -73,9 +71,7 @@ main:
     subq  $1024, %rsp
     movq  $7, %rax
     pushq %rax
-    movq  $3, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $3, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -85,7 +81,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -8(%rbp)
-    movq  -8(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -97,9 +92,7 @@ main:
     popq  %r12
     movq  $2, %rax
     pushq %rax
-    movq  $10, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $10, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -109,7 +102,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -16(%rbp)
-    movq  -16(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -121,9 +113,7 @@ main:
     popq  %r12
     movq  $99, %rax
     pushq %rax
-    movq  $100, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $100, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -133,7 +123,6 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -24(%rbp)
-    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -150,8 +139,7 @@ main:
     leaq  -40(%rbp), %rax
     pushq %rax
     leaq  -32(%rbp), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -182,13 +170,12 @@ main:
     popq  %r12
     movq  $42, %rax
     movq  %rax, -48(%rbp)
-    movq  $0, %rax
+    xorq  %rax, %rax
     movq  %rax, -56(%rbp)
     leaq  -56(%rbp), %rax
     pushq %rax
     leaq  -48(%rbp), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -220,7 +207,5 @@ main:
     xorq  %rax, %rax
     leave
     ret
-
-.section .note.GNU-stack,"",@progbits
 
 === STDERR ===

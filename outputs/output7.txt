@@ -206,9 +206,7 @@ main:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $1, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $1, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -216,9 +214,7 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $2, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $2, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -226,9 +222,7 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $3, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $3, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -236,9 +230,7 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $5, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $5, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -246,9 +238,7 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $1, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $1, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -256,9 +246,7 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $3, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $3, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -266,9 +254,7 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $5, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $5, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -276,9 +262,7 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $6, %rax
-    pushq %rax
-    popq  %rdi
+    movq  $6, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -288,9 +272,7 @@ main:
     popq  %r12
     movq  $2, %rax
     movq  %rax, -8(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
-    popq  %rdi
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -313,7 +295,5 @@ LC_14: .string "miercoles"
 LC_16: .string "jueves"
 LC_18: .string "viernes"
 LC_19: .string "fin de semana"
-
-.section .note.GNU-stack,"",@progbits
 
 === STDERR ===
