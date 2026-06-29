@@ -10,29 +10,75 @@ print_str_fmt:  .string "%s\n"
 
 .section .text
 .globl main
-    movq  $100, %rax
-    movq  %rax, -8(%rbp)
 
-buscarEn:
+clamp:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  $0, %rax
-    movq  %rax, -24(%rbp)
-while_start_0:
-    movq  -24(%rbp), %rax
-    pushq %rax
+    movq  %rdx, -24(%rbp)
     movq  -8(%rbp), %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
     movq  %rax, %rcx
     popq  %rax
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
     cmpq  $0, %rax
-    je    while_end_1
+    je    else_0
+    movq  -16(%rbp), %rax
+    leave
+    ret
+    jmp   endif_1
+else_0:
     movq  -8(%rbp), %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    setg  %al
+    movzbq %al, %rax
+    cmpq  $0, %rax
+    je    else_2
+    movq  -24(%rbp), %rax
+    leave
+    ret
+    jmp   endif_3
+else_2:
+    movq  -8(%rbp), %rax
+    leave
+    ret
+endif_3:
+endif_1:
+    xorq  %rax, %rax
+    leave
+    ret
+
+buscarEn:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  %rdi, -8(%rbp)
+    movq  %rsi, -16(%rbp)
+    movq  $0, %rax
+    movq  %rax, -24(%rbp)
+while_start_4:
+    movq  -24(%rbp), %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    movq  0(%rax), %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    setl  %al
+    movzbq %al, %rax
+    cmpq  $0, %rax
+    je    while_end_5
+    movq  -8(%rbp), %rax
+    movq  0(%rax), %rax
     pushq %rax
     movq  -24(%rbp), %rax
     popq  %rcx
@@ -47,13 +93,13 @@ while_start_0:
     sete  %al
     movzbq %al, %rax
     cmpq  $0, %rax
-    je    else_2
+    je    else_6
     movq  -32(%rbp), %rax
     leave
     ret
-    jmp   endif_3
-else_2:
-endif_3:
+    jmp   endif_7
+else_6:
+endif_7:
     movq  -24(%rbp), %rax
     pushq %rax
     movq  $1, %rax
@@ -61,8 +107,8 @@ endif_3:
     popq  %rax
     addq  %rcx, %rax
     movq  %rax, -24(%rbp)
-    jmp   while_start_0
-while_end_1:
+    jmp   while_start_4
+while_end_5:
     xorq  %rax, %rax
     leave
     ret
@@ -73,19 +119,44 @@ while_end_1:
 main:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  $8, %rdi
+    movq  %rsp, %r12
     andq  $-16, %rsp
+    xorq  %rax, %rax
     call  malloc@PLT
+    movq  %r12, %rsp
     movq  %rax, -8(%rbp)
+    movq  $5, %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    movq  0(%rax), %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $10, %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    movq  0(%rax), %rax
+    pushq %rax
+    movq  $0, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
     movq  $10, %rax
     pushq %rax
     movq  -8(%rbp), %rax
     pushq %rax
     popq  %rdi
     popq  %rsi
+    movq  %rsp, %r12
     andq  $-16, %rsp
+    xorq  %rax, %rax
     call  buscarEn
+    movq  %r12, %rsp
     movq  %rax, -16(%rbp)
     movq  -16(%rbp), %rax
     pushq %rax
@@ -101,37 +172,40 @@ main:
     pushq %rax
     movq  $10, %rax
     movq  %rax, %rcx
-    popq  %rax
-    pushq %rax
+    movq  0(%rsp), %rax
     cmpq  %rcx, %rax
-    jne   switch_next_5
-    leaq  LC_6(%rip), %rax
+    jne   switch_next_9
+    leaq  LC_10(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    popq  %rcx
-    jmp   switch_end_4
-switch_next_5:
-    leaq  LC_7(%rip), %rax
+    addq  $8, %rsp
+    jmp   switch_end_8
+switch_next_9:
+    leaq  LC_11(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    popq  %rcx
-switch_end_4:
+    addq  $8, %rsp
+switch_end_8:
     movq  -8(%rbp), %rax
+    movq  0(%rax), %rax
+    movq  %rax, -48(%rbp)
+    movq  $0, %rax
+    movq  %rax, -40(%rbp)
+for_start_12:
+    movq  -40(%rbp), %rax
+    movq  -48(%rbp), %rcx
+    movq  (%rcx,%rax,8), %rax
     movq  %rax, -32(%rbp)
-for_start_8:
-    xorq  %rax, %rax
-    cmpq  $0, %rax
-    je    for_end_9
     movq  $50, %rax
     pushq %rax
     movq  $5, %rax
@@ -141,10 +215,13 @@ for_start_8:
     popq  %rdi
     popq  %rsi
     popq  %rdx
+    movq  %rsp, %r12
     andq  $-16, %rsp
+    xorq  %rax, %rax
     call  clamp
-    movq  %rax, -40(%rbp)
-    movq  -40(%rbp), %rax
+    movq  %r12, %rsp
+    movq  %rax, -64(%rbp)
+    movq  -64(%rbp), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
@@ -152,10 +229,11 @@ for_start_8:
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    xorq  %rax, %rax
-    movq  %rax, -48(%rbp)
-    jmp   for_start_8
-for_end_9:
+    movq  -40(%rbp), %rax
+    addq  $1, %rax
+    movq  %rax, -40(%rbp)
+    jmp   for_start_12
+for_end_13:
     xorq  %rax, %rax
     leave
     ret
@@ -164,8 +242,8 @@ for_end_9:
     ret
 
 .section .rodata
-LC_6: .string "encontrado"
-LC_7: .string "no encontrado"
+LC_10: .string "encontrado"
+LC_11: .string "no encontrado"
 
 .section .note.GNU-stack,"",@progbits
 

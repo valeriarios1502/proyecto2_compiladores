@@ -10,6 +10,18 @@ TOKEN(LBRACE, "{")
 TOKEN(VAR, "var")
 
 TOKEN(ASSIGN, "=")
+TOKEN(NEW, "new")
+
+TOKEN(SEMICOL, ";")
+TOKEN(VAR, "var")
+
+TOKEN(ASSIGN, "=")
+TOKEN(NEW, "new")
+
+TOKEN(SEMICOL, ";")
+TOKEN(VAR, "var")
+
+TOKEN(ASSIGN, "=")
 TOKEN(NUMDECIMAL, "1")
 TOKEN(PLUS, "+")
 TOKEN(NUMDECIMAL, "2")
@@ -63,12 +75,6 @@ TOKEN(VAR, "var")
 
 TOKEN(ASSIGN, "=")
 TOKEN(STAR, "*")
-
-TOKEN(SEMICOL, ";")
-TOKEN(VAR, "var")
-
-TOKEN(ASSIGN, "=")
-TOKEN(NEW, "new")
 
 TOKEN(SEMICOL, ";")
 TOKEN(VAR, "var")

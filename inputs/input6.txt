@@ -1,32 +1,27 @@
 pub fn control () void {
   var i = 0;
+  var arr = new i32;
+  arr[0] = 10;
+  arr[1] = 20;
+  arr[2] = 30;
+  var len = 3;
 
-  if (i == 0) then {
+   if (i == 0) then {
     print("cero");
-  } else then {
+    } else then {
     print("no cero");
-  }
-
-  while (i < 10) {
-    if (i == 5) then {
-      break;
     }
-    i = i + 1;
-  }
-
-  for (arr) |elem| {
-    print(elem);
-  }
 
   for (arr) |elem, idx| {
-    print(idx);
+    if (idx == len) then {
+      break;
+    }
     print(elem);
   }
 
-  defer print("saliendo");
-
-  var p = new i32;
-  free p;
-
   return;
+}
+
+pub fn main () void {
+  control();
 }

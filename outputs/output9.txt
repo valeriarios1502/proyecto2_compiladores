@@ -14,7 +14,7 @@ print_str_fmt:  .string "%s\n"
 ejemplo:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  -8(%rbp), %rax
     pushq %rax

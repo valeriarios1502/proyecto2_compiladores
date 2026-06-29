@@ -14,12 +14,12 @@ print_str_fmt:  .string "%s\n"
 saludar:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     leaq  LC_0(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
@@ -30,7 +30,7 @@ saludar:
 sumar:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  -8(%rbp), %rax
@@ -48,7 +48,7 @@ sumar:
 identidad:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  -16(%rbp), %rax
@@ -61,7 +61,7 @@ identidad:
 buscar:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
     movq  $0, %rax
@@ -113,6 +113,121 @@ while_end_2:
     xorq  %rax, %rax
     leave
     ret
+    xorq  %rax, %rax
+    leave
+    ret
+
+main:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  saludar
+    movq  %r12, %rsp
+    movq  $4, %rax
+    pushq %rax
+    movq  $3, %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  sumar
+    movq  %r12, %rsp
+    movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    movq  $8, %rdi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  malloc@PLT
+    movq  %r12, %rsp
+    movq  %rax, -16(%rbp)
+    movq  $10, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $20, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $1, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $30, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $2, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $40, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $3, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $50, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $4, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $30, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  buscar
+    movq  %r12, %rsp
+    movq  %rax, -24(%rbp)
+    movq  -24(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
     xorq  %rax, %rax
     leave
     ret

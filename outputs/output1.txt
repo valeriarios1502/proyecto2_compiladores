@@ -10,10 +10,6 @@ print_str_fmt:  .string "%s\n"
 
 .section .text
 .globl main
-    movabsq $4614256650843324416, %rax
-    movq  %rax, -8(%rbp)
-    movq  $100, %rax
-    movq  %rax, -16(%rbp)
 
 .section .note.GNU-stack,"",@progbits
 

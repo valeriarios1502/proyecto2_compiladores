@@ -14,53 +14,51 @@ print_str_fmt:  .string "%s\n"
 clasifica:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  %rdi, -8(%rbp)
     movq  -8(%rbp), %rax
     pushq %rax
     movq  $1, %rax
     movq  %rax, %rcx
-    popq  %rax
-    pushq %rax
+    movq  0(%rsp), %rax
     cmpq  %rcx, %rax
     jne   switch_next_1
     leaq  LC_2(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    popq  %rcx
+    addq  $8, %rsp
     jmp   switch_end_0
 switch_next_1:
     movq  $2, %rax
     movq  %rax, %rcx
-    popq  %rax
-    pushq %rax
+    movq  0(%rsp), %rax
     cmpq  %rcx, %rax
     jne   switch_next_3
     leaq  LC_4(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    popq  %rcx
+    addq  $8, %rsp
     jmp   switch_end_0
 switch_next_3:
     leaq  LC_5(%rip), %rax
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
-    popq  %rcx
+    addq  $8, %rsp
 switch_end_0:
     xorq  %rax, %rax
     leave

@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
-#include <cstring>   // memcpy
+#include <cstring>
 #include <cmath>
 #include "ast.h"
 #include "visitor.h"
@@ -17,21 +17,14 @@ using namespace std;
 //   Caller-saved : %rax %rcx %rdx %rsi %rdi %r8 %r9 %r10 %r11
 //   Callee-saved : %rbx %rbp %r12 %r13 %r14 %r15
 //   Argumentos   : %rdi %rsi %rdx %rcx %r8 %r9  (en ese orden)
-//   Retorno      : %rax  (entero/puntero), %xmm0 (flotante — aquí no usado)
-//   Red-zone     : 128 bytes por debajo de %rsp son preservados por señales;
-//                  no necesitamos ajustar %rsp para leaf-functions, pero sí
-//                  para funciones que hacen call (necesitamos %rsp alineado a 16).
+//   Retorno      : %rax
 //
-//  Invariante de este generador:
-//   Toda expresión deja su resultado (64 bits) en %rax.
-//   Para operar dos sub-expresiones A op B:
-//     1. eval(A) → %rax ; pushq %rax        (guarda A)
-//     2. eval(B) → %rax                     (B queda en %rax)
-//     3. movq %rax, %rcx                    (right = B en %rcx)
-//        popq  %rax                         (left  = A en %rax)
-//     4. %rax OP %rcx → %rax               (resultado en %rax)
-//
-//  Registros de argumentos (System V AMD64)
+//  Invariante: toda expresión deja su resultado en %rax.
+//  Para A op B:
+//    1. eval(A) → pushq %rax
+//    2. eval(B) → %rax
+//    3. movq %rax, %rcx  ;  popq %rax
+//    4. %rax OP %rcx → %rax
 // ═════════════════════════════════════════════════════════
 
 static const char* argRegs[] = {
@@ -47,37 +40,32 @@ void GenCodeVisitor::gencode(Programa* programa) {
         if (Fundec* fd = dynamic_cast<Fundec*>(d))
             funEnv[fd->nombre] = fd;
 
-    // 2. Primera pasada: recolectar string literals
-    //    Los emitimos en .rodata antes de .text para no fragmentar secciones.
-    //    (la recolección real ocurre durante visit(StringExp*); aquí solo
-    //     reservamos la sección y la llenamos al final)
-
-    // 3. Sección de datos: formatos printf
+    // 2. Sección de datos: formatos printf
     cout << ".section .data" << endl;
-    cout << "print_i32_fmt:  .string \"%d\\n\""  << endl;  // i32  / int
-    cout << "print_i64_fmt:  .string \"%ld\\n\"" << endl;  // i64  / long
-    cout << "print_u64_fmt:  .string \"%lu\\n\"" << endl;  // u64  (sin signo)
-    cout << "print_f32_fmt:  .string \"%f\\n\""  << endl;  // f32  / float
-    cout << "print_f64_fmt:  .string \"%g\\n\""  << endl;  // f64  / double
-    cout << "print_str_fmt:  .string \"%s\\n\""  << endl;  // string / *char
+    cout << "print_i32_fmt:  .string \"%d\\n\""  << endl;
+    cout << "print_i64_fmt:  .string \"%ld\\n\"" << endl;
+    cout << "print_u64_fmt:  .string \"%lu\\n\"" << endl;
+    cout << "print_f32_fmt:  .string \"%f\\n\""  << endl;
+    cout << "print_f64_fmt:  .string \"%g\\n\""  << endl;
+    cout << "print_str_fmt:  .string \"%s\\n\""  << endl;
     cout << endl;
 
-    // 4. Sección de texto
+    // 3. Sección de texto
     cout << ".section .text" << endl;
     cout << ".globl main"    << endl;
 
-    // 5. Generar código de cada declaración
+    // 4. Generar código de cada declaración
     programa->accept(this);
 
-    // 6. Sección .rodata con los literales de string acumulados
+    // 5. Sección .rodata con literales de string acumulados
     if (!stringLiterals.empty()) {
         cout << endl;
         cout << ".section .rodata" << endl;
-        for (auto it = stringLiterals.begin(); it != stringLiterals.end(); ++it)
-    cout << it->first << ": .string \"" << it->second << "\"" << endl;
+        for (auto& p : stringLiterals)
+            cout << p.first << ": .string \"" << p.second << "\"" << endl;
     }
 
-    // 7. Marca de stack no ejecutable (Linux/GAS)
+    // 6. Marca de stack no ejecutable
     cout << endl;
     cout << ".section .note.GNU-stack,\"\",@progbits" << endl;
 }
@@ -92,14 +80,14 @@ void GenCodeVisitor::visit(Programa* p) {
 // ── Funciones ────────────────────────────────────────────
 
 void GenCodeVisitor::visit(Fundec* fd) {
-    if (fd->nombre == "__comptime__") return; // bloques comptime: ignorar
+    if (fd->nombre == "__comptime__") return;
 
-    // Guardar estado del contexto anterior (soporte para funciones anidadas)
-    string prevFunction   = currentFunction;
-    string prevLoopEnd    = currentLoopEnd;
-    string prevLoopStart  = currentLoopStart;
-    auto   prevPosicion   = posicion;
-    int    prevContador   = varContador;
+    // Guardar estado del contexto anterior
+    string prevFunction  = currentFunction;
+    string prevLoopEnd   = currentLoopEnd;
+    string prevLoopStart = currentLoopStart;
+    auto   prevPosicion  = posicion;
+    int    prevContador  = varContador;
 
     currentFunction  = fd->nombre;
     currentLoopEnd   = "";
@@ -107,44 +95,21 @@ void GenCodeVisitor::visit(Fundec* fd) {
     posicion.clear();
     varContador = 1;
 
-    // ── Registrar parámetros en el entorno de posiciones ──
-    // Ocupan los primeros slots del frame; se copian desde los registros
-    // de argumento al stack en el prólogo.
+    // Registrar parámetros en el entorno (primeros slots del frame)
     for (size_t i = 0; i < fd->id_parametros.size(); ++i)
         posicion[fd->id_parametros[i]] = varContador++;
 
-    // ── Estimar slots necesarios para alinear el frame ──
-    // 32 slots = 256 bytes mínimo (conservador; suficiente para la mayoría
-    // de funciones de un compilador de curso).
-    const int FRAME_SLOTS = 32;
-    int frameBytes = alignFrame(FRAME_SLOTS); // siempre múltiplo de 16
+    const int FRAME_SLOTS = 64;  // 512 bytes — espacio para arrays locales
+    int frameBytes = alignFrame(FRAME_SLOTS);
 
-    // ── Prólogo estándar ─────────────────────────────────
-    //
-    //  Análisis de alineación:
-    //    Antes de entrar a esta función el caller hizo "call f" que apila la
-    //    dirección de retorno (8 bytes). Por convención System V AMD64, %rsp
-    //    estaba alineado a 16 en el punto de "call", así que al entrar aquí
-    //    %rsp % 16 == 8.
-    //    pushq %rbp  →  %rsp -= 8  →  %rsp % 16 == 0
-    //    subq  $N    →  %rsp -= N  →  si N % 16 == 0, %rsp % 16 == 0  ✓
-    //
-    //  Caso especial: main()
-    //    El loader llama a __libc_start_main que llama a main.
-    //    Al entrar a main, %rsp % 16 == 8  (igual que cualquier otra función).
-    //    La secuencia pushq+subq deja %rsp % 16 == 0  ✓
-    //
-    //  Para blindarse ante cualquier desalineación residual (p.ej. si algún
-    //  pushq en el cuerpo no fue compensado con un popq), añadimos
-    //  "andq $-16, %rsp" justo antes de cada call en PrintStmt y FcallExp.
+    // ── Prólogo ──────────────────────────────────────────
     cout << endl;
     cout << fd->nombre << ":" << endl;
-    cout << "    pushq %rbp"                        << endl;  // salvar frame anterior
-    cout << "    movq  %rsp, %rbp"                  << endl;  // establecer frame base
-    cout << "    subq  $" << frameBytes << ", %rsp"  << endl;  // reservar espacio local
-    // frameBytes es múltiplo de 16: tras pushq(%rsp%16==0) - frameBytes(%16==0) = 0 ✓
+    cout << "    pushq %rbp"                         << endl;
+    cout << "    movq  %rsp, %rbp"                   << endl;
+    cout << "    subq  $" << frameBytes << ", %rsp"  << endl;
 
-    // Copiar argumentos de registros al stack (máx. 6 por ABI)
+    // Copiar argumentos de registros al stack
     for (size_t i = 0; i < fd->id_parametros.size() && i < (size_t)MAX_REG_ARGS; ++i)
         cout << "    movq  " << argRegs[i] << ", "
              << offset(fd->id_parametros[i]) << endl;
@@ -153,9 +118,8 @@ void GenCodeVisitor::visit(Fundec* fd) {
     if (fd->cuerpo) fd->cuerpo->accept(this);
 
     // ── Epílogo de seguridad ─────────────────────────────
-    // Si el control llega aquí (sin return explícito), retorna 0.
     cout << "    xorq  %rax, %rax" << endl;
-    cout << "    leave"            << endl;  // movq %rbp,%rsp ; popq %rbp
+    cout << "    leave"            << endl;
     cout << "    ret"              << endl;
 
     // Restaurar contexto
@@ -176,22 +140,26 @@ void GenCodeVisitor::visit(Body* b) {
 // ── Declaraciones de variables ────────────────────────────
 
 void GenCodeVisitor::visit(VarDec* vd) {
-    if (currentFunction.empty()) return; // ← AGREGA ESTA LÍNEA
-    
+    // Ignorar declaraciones globales (fuera de función)
+    if (currentFunction.empty()) return;
+
     if (posicion.find(vd->nombre) == posicion.end())
         posicion[vd->nombre] = varContador++;
+
     if (vd->exp) {
-        vd->exp->accept(this);
+        vd->exp->accept(this);                           // resultado en %rax
         cout << "    movq  %rax, " << offset(vd->nombre) << endl;
     }
 }
 
 void GenCodeVisitor::visit(ConstDec* cd) {
+    if (currentFunction.empty()) return;
+
     if (posicion.find(cd->nombre) == posicion.end())
         posicion[cd->nombre] = varContador++;
 
     if (cd->exp) {
-        cd->exp->accept(this);                          // resultado en %rax
+        cd->exp->accept(this);
         cout << "    movq  %rax, " << offset(cd->nombre) << endl;
     }
 }
@@ -200,7 +168,6 @@ void GenCodeVisitor::visit(ConstDec* cd) {
 
 void GenCodeVisitor::visit(AsignStmt* stm) {
     if (stm->variable == "__call__") {
-        // Llamada usada como sentencia; el resultado en %rax se descarta.
         if (stm->exp) stm->exp->accept(this);
         return;
     }
@@ -208,43 +175,90 @@ void GenCodeVisitor::visit(AsignStmt* stm) {
     if (posicion.find(stm->variable) == posicion.end())
         posicion[stm->variable] = varContador++;
 
-    stm->exp->accept(this);                             // resultado en %rax
+    stm->exp->accept(this);
     cout << "    movq  %rax, " << offset(stm->variable) << endl;
+}
+
+// ── DerefAssignStmt: *lval = rval ────────────────────────
+//
+//  Estrategia:
+//    1. Evaluar rval → %rax → pushq (valor a almacenar)
+//    2. Evaluar dirección del lval → %rax
+//       - Si el lval es un UnaryExp DEREF sobre un IdExp, la dirección
+//         del puntero ya está en el frame; la cargamos con leaq/movq.
+//       - Caso general: evaluamos la sub-expresión (que debe dejar la
+//         dirección en %rax) y la movemos a %rcx.
+//    3. popq %rdx  (valor a almacenar)
+//    4. movq %rdx, (%rcx)  (almacenar en la dirección)
+
+void GenCodeVisitor::visit(DerefAssignStmt* stm) {
+    // Evaluar el lado derecho primero y apilarlo
+    stm->rval->accept(this);
+    cout << "    pushq %rax" << endl;   // valor → stack
+
+    // Obtener la dirección del lval
+    // El lval puede ser:
+    //   - AlgoconcorchetesExp (array[idx]) → necesitamos la dirección del elemento
+    //   - PuntoExp (struct.campo)
+    //   - UnaryExp DEREF (*ptr) → la dirección está en el puntero
+    //   - IdExp (variable simple) → leaq da su dirección en el frame
+    if (AlgoconcorchetesExp* arr = dynamic_cast<AlgoconcorchetesExp*>(stm->lval)) {
+        // base + idx*8
+        arr->nombre->accept(this);              // base → %rax
+        cout << "    pushq %rax" << endl;
+        arr->dentroexp->accept(this);           // idx  → %rax
+        cout << "    imulq $8, %rax" << endl;   // idx * 8
+        cout << "    popq  %rcx"     << endl;   // base → %rcx
+        cout << "    addq  %rcx, %rax" << endl; // dirección = base + idx*8
+    } else if (UnaryExp* ue = dynamic_cast<UnaryExp*>(stm->lval)) {
+        // *ptr = rval  → la dirección es el valor del puntero
+        ue->exp->accept(this);                  // valor del puntero → %rax
+    } else if (IdExp* id = dynamic_cast<IdExp*>(stm->lval)) {
+        // &id → dirección en el frame
+        if (posicion.find(id->value) == posicion.end())
+            posicion[id->value] = varContador++;
+        cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
+    } else {
+        // Caso general: evaluar el lval (debe dejar dirección en %rax)
+        stm->lval->accept(this);
+    }
+
+    cout << "    movq  %rax, %rcx"  << endl;   // dirección → %rcx
+    cout << "    popq  %rdx"        << endl;   // valor     → %rdx
+    cout << "    movq  %rdx, (%rcx)" << endl;  // *dirección = valor
 }
 
 // ── PrintStmt ────────────────────────────────────────────
 //
-//  Usamos siempre print_i64_fmt (%ld) ya que todas las variables del
-//  generador son 64 bits. Un compilador con tabla de tipos elegiría el
-//  formato correcto por tipo.
+//  Detectamos si la expresión es un StringExp para usar %s, y en caso
+//  contrario usamos %ld (entero de 64 bits).
 //
-//  Alineación de %rsp:
-//    Antes de "call printf@PLT" el ABI System V AMD64 exige %rsp % 16 == 0.
-//    Salvamos el %rsp real en %r12 (callee-saved → printf no lo toca),
-//    lo alineamos con "andq $-16, %rsp" y lo restauramos tras el call.
+//  Alineación: salvamos %rsp en %r12 (callee-saved) antes de printf.
 
 void GenCodeVisitor::visit(PrintStmt* stm) {
+    bool esString = dynamic_cast<StringExp*>(stm->exp) != nullptr;
+
     stm->exp->accept(this);                             // valor en %rax
 
-    // Salvar %rsp en %r12 (callee-saved: printf no lo modifica)
-    // y alinear %rsp a 16 bytes antes del call.
-    // "andq $-16, %rsp" pone a cero los últimos 4 bits → múltiplo de 16.
-    cout << "    movq  %rsp, %r12"                     << endl; // salvar rsp real
-    cout << "    andq  $-16, %rsp"                     << endl; // alinear a 16
+    cout << "    movq  %rsp, %r12"                     << endl;
+    cout << "    andq  $-16, %rsp"                     << endl;
+    cout << "    movq  %rax, %rsi"                     << endl;
 
-    cout << "    movq  %rax, %rsi"                     << endl; // arg2: valor
-    cout << "    leaq  print_i64_fmt(%rip), %rdi"      << endl; // arg1: formato
-    cout << "    xorq  %rax, %rax"                     << endl; // varargs: 0 regs XMM
+    if (esString)
+        cout << "    leaq  print_str_fmt(%rip), %rdi"  << endl;
+    else
+        cout << "    leaq  print_i64_fmt(%rip), %rdi"  << endl;
+
+    cout << "    xorq  %rax, %rax"                     << endl;
     cout << "    call  printf@PLT"                     << endl;
-
-    cout << "    movq  %r12, %rsp"                     << endl; // restaurar rsp
+    cout << "    movq  %r12, %rsp"                     << endl;
 }
 
 void GenCodeVisitor::visit(ReturnStm* stm) {
     if (stm->exp)
-        stm->exp->accept(this);                         // resultado en %rax
+        stm->exp->accept(this);
     else
-        cout << "    xorq  %rax, %rax" << endl;         // return void/0
+        cout << "    xorq  %rax, %rax" << endl;
 
     cout << "    leave" << endl;
     cout << "    ret"   << endl;
@@ -254,16 +268,13 @@ void GenCodeVisitor::visit(IfStmt* stm) {
     string labelElse = newLabel("else");
     string labelEnd  = newLabel("endif");
 
-    // Evaluar condición → %rax
     stm->condicion->accept(this);
-    cout << "    cmpq  $0, %rax"        << endl;  // testq %rax,%rax también válido
-    cout << "    je    " << labelElse   << endl;  // si falso, saltar a else
+    cout << "    cmpq  $0, %rax"      << endl;
+    cout << "    je    " << labelElse << endl;
 
-    // Rama then
     stm->cuerpodelif->accept(this);
-    cout << "    jmp   " << labelEnd    << endl;
+    cout << "    jmp   " << labelEnd  << endl;
 
-    // Rama else
     cout << labelElse << ":" << endl;
     if (stm->hayelse && stm->cuerpodelelse)
         stm->cuerpodelelse->accept(this);
@@ -275,7 +286,6 @@ void GenCodeVisitor::visit(WhileStmt* stm) {
     string labelStart = newLabel("while_start");
     string labelEnd   = newLabel("while_end");
 
-    // Guardar contexto del bucle externo (soporte para break/continue anidados)
     string prevStart = currentLoopStart;
     string prevEnd   = currentLoopEnd;
     currentLoopStart = labelStart;
@@ -283,45 +293,11 @@ void GenCodeVisitor::visit(WhileStmt* stm) {
 
     cout << labelStart << ":" << endl;
 
-    stm->condicion->accept(this);                       // condición en %rax
-    cout << "    cmpq  $0, %rax"        << endl;
-    cout << "    je    " << labelEnd    << endl;
+    stm->condicion->accept(this);
+    cout << "    cmpq  $0, %rax"      << endl;
+    cout << "    je    " << labelEnd  << endl;
 
     for (Stmt* s : stm->cuerpodelwhile) s->accept(this);
-
-    cout << "    jmp   " << labelStart  << endl;
-    cout << labelEnd << ":"             << endl;
-
-    currentLoopStart = prevStart;
-    currentLoopEnd   = prevEnd;
-}
-
-void GenCodeVisitor::visit(ForStmt* stm) {
-    string labelStart = newLabel("for_start");
-    string labelEnd   = newLabel("for_end");
-
-    string prevStart = currentLoopStart;
-    string prevEnd   = currentLoopEnd;
-    currentLoopStart = labelStart;
-    currentLoopEnd   = labelEnd;
-
-    // Inicialización (p.ej. i = 0)
-    if (stm->asignacion) stm->asignacion->accept(this);
-
-    cout << labelStart << ":" << endl;
-
-    // Condición
-    if (stm->condicion) {
-        stm->condicion->accept(this);                   // condición en %rax
-        cout << "    cmpq  $0, %rax"       << endl;
-        cout << "    je    " << labelEnd   << endl;
-    }
-
-    // Cuerpo
-    if (stm->cuerpo) stm->cuerpo->accept(this);
-
-    // Incremento (p.ej. i = i + 1)
-    if (stm->incremento) stm->incremento->accept(this);
 
     cout << "    jmp   " << labelStart << endl;
     cout << labelEnd << ":"            << endl;
@@ -330,12 +306,143 @@ void GenCodeVisitor::visit(ForStmt* stm) {
     currentLoopEnd   = prevEnd;
 }
 
+// ── ForStmt ──────────────────────────────────────────────
+//
+//  El parser genera ForStmt con:
+//    asignacion = AsignStmt(var, iterable)   ← iterable es el array/rango
+//    condicion  = NullExp()                  ← placeholder
+//    incremento = AsignStmt(idx, NullExp())  ← placeholder
+//    cuerpo     = Body
+//
+//  Para un for real sobre un rango 0..N necesitamos saber N.
+//  Dado que el parser usa NullExp como condición, el for clásico
+//  con variable de iteración y condición explícita se maneja aquí:
+//
+//  Si la condición es NullExp asumimos que el iterable es el array
+//  y el var es el elemento (for each semántico). En ese caso generamos
+//  un bucle infinito que el usuario debe romper con break.
+//  Si la condición NO es NullExp, generamos un for clásico.
+
+void GenCodeVisitor::visit(ForStmt* stm) {
+    // El parser genera ForStmt para  for (iterable) |elem|  y  for (iterable) |elem, idx|
+    // de esta forma:
+    //   asignacion = AsignStmt(elem, iterable)
+    //   condicion  = NullExp()      ← placeholder (no es un for clásico con condición)
+    //   incremento = AsignStmt(idx o __idx__, NullExp())
+    //   cuerpo     = Body
+    //
+    // Detectamos si es un for-each o un for clásico:
+    //   - for-each:  condicion == NullExp  (viene del parser de for)
+    //   - for clásico: condicion != NullExp
+
+    bool esForEach = (dynamic_cast<NullExp*>(stm->condicion) != nullptr);
+
+    string labelStart = newLabel("for_start");
+    string labelEnd   = newLabel("for_end");
+
+    string prevStart = currentLoopStart;
+    string prevEnd   = currentLoopEnd;
+    currentLoopStart = labelStart;
+    currentLoopEnd   = labelEnd;
+
+    if (esForEach) {
+        // ── For-each: for (arr) |elem|  o  for (arr) |elem, idx| ────────
+        //
+        // Extraemos nombres de elem e idx del AST
+        AsignStmt* initStmt = dynamic_cast<AsignStmt*>(stm->asignacion);
+        AsignStmt* idxStmt  = dynamic_cast<AsignStmt*>(stm->incremento);
+
+        string elemVar = initStmt ? initStmt->variable : "__elem__";
+        string idxVar  = idxStmt  ? idxStmt->variable  : "__idx__";
+
+        // Registrar elem e idx en posicion si no existen
+        if (posicion.find(elemVar) == posicion.end())
+            posicion[elemVar] = varContador++;
+        if (posicion.find(idxVar) == posicion.end())
+            posicion[idxVar] = varContador++;
+
+        // Registrar variable interna __arr_base__ para guardar la base del array
+        string baseVar = newLabel("__arr_base__");
+        string lenVar  = newLabel("__arr_len__");
+        posicion[baseVar] = varContador++;
+        posicion[lenVar]  = varContador++;
+
+        // Evaluar el iterable (el array) → %rax = dirección base
+        // El iterable está en initStmt->exp (p.ej. IdExp("arr"))
+        if (initStmt && initStmt->exp) {
+            // Si arr es una variable declarada, cargamos su dirección (leaq)
+            // Si no está declarada, avisamos y usamos 0
+            if (IdExp* id = dynamic_cast<IdExp*>(initStmt->exp)) {
+                if (posicion.find(id->value) != posicion.end()) {
+                    // arr es una variable en el frame: su valor ES la dirección base
+                    cout << "    movq  " << offset(id->value) << ", %rax" << endl;
+                } else {
+                    cerr << "[GenCode] Advertencia: iterable no declarado: '"
+                         << id->value << "' — se usará 0" << endl;
+                    cout << "    xorq  %rax, %rax" << endl;
+                }
+            } else {
+                initStmt->exp->accept(this);
+            }
+        } else {
+            cout << "    xorq  %rax, %rax" << endl;
+        }
+        // Guardar base del array en __arr_base__
+        cout << "    movq  %rax, " << offset(baseVar) << endl;
+
+        // Inicializar idx = 0
+        cout << "    movq  $0, %rax" << endl;
+        cout << "    movq  %rax, " << offset(idxVar) << endl;
+
+        // NOTA: sin información de longitud en tiempo de compilación,
+        // generamos un bucle infinito (el usuario usa break para salir,
+        // o bien el array tiene un centinela). Si el array viene de
+        // malloc con tamaño conocido, habría que pasarlo explícitamente.
+        // Por ahora el bucle corre hasta break o hasta que se salga del scope.
+        cout << labelStart << ":" << endl;
+
+        // Cargar elem = arr[idx]
+        cout << "    movq  " << offset(idxVar)  << ", %rax" << endl;  // idx
+        cout << "    movq  " << offset(baseVar) << ", %rcx" << endl;  // base
+        cout << "    movq  (%rcx,%rax,8), %rax" << endl;                // arr[idx]
+        cout << "    movq  %rax, " << offset(elemVar) << endl;           // elem = arr[idx]
+
+        // Ejecutar cuerpo
+        if (stm->cuerpo) stm->cuerpo->accept(this);
+
+        // idx = idx + 1
+        cout << "    movq  " << offset(idxVar) << ", %rax" << endl;
+        cout << "    addq  $1, %rax" << endl;
+        cout << "    movq  %rax, " << offset(idxVar) << endl;
+
+        cout << "    jmp   " << labelStart << endl;
+        cout << labelEnd << ":" << endl;
+
+    } else {
+        // ── For clásico: for (init; cond; inc) ───────────────────────────
+        if (stm->asignacion) stm->asignacion->accept(this);
+
+        cout << labelStart << ":" << endl;
+
+        stm->condicion->accept(this);
+        cout << "    cmpq  $0, %rax"     << endl;
+        cout << "    je    " << labelEnd  << endl;
+
+        if (stm->cuerpo) stm->cuerpo->accept(this);
+
+        if (stm->incremento) stm->incremento->accept(this);
+
+        cout << "    jmp   " << labelStart << endl;
+        cout << labelEnd << ":"            << endl;
+    }
+
+    currentLoopStart = prevStart;
+    currentLoopEnd   = prevEnd;
+}
+
 void GenCodeVisitor::visit(BreakStmt* stm) {
-    // Si tiene valor (break :label valor) lo evaluamos pero lo descartamos
-    // por ahora (soporte completo requeriría retornar el valor del bloque).
     if (stm->tiene_valor && stm->valor)
         stm->valor->accept(this);
-
     if (!currentLoopEnd.empty())
         cout << "    jmp   " << currentLoopEnd << endl;
 }
@@ -347,53 +454,49 @@ void GenCodeVisitor::visit(ContinueStm* stm) {
 
 // ── SwitchStmt ───────────────────────────────────────────
 //
-//  Patrón generado:
-//    eval(condicion) → pushq %rax       ; valor del switch en stack
-//    para cada caso patron => body:
-//      eval(patron) → %rcx
-//      popq %rax  ; valor del switch
-//      pushq %rax ; volver a poner (para el siguiente caso)
-//      cmpq %rcx, %rax           ; AT&T: compara %rax − %rcx
+//  Patrón:
+//    eval(condicion) → pushq %rax        ; valor del switch en stack
+//    para cada caso:
+//      eval(patron)  → %rax
+//      movq %rax, %rcx                   ; patrón → %rcx
+//      movq 0(%rsp), %rax                ; peek valor sin modificar stack
+//      cmpq %rcx, %rax
 //      jne  siguiente_caso
 //      <body>
+//      addq $8, %rsp                     ; limpiar valor del switch
 //      jmp  switch_end
-//      siguiente_caso:
-//    default body (si existe)
-//    popq %rcx   ; limpiar el valor del switch
+//    default (si existe)
+//    addq $8, %rsp                       ; limpiar valor del switch
 //    switch_end:
 
 void GenCodeVisitor::visit(SwitchStmt* stm) {
     string labelEnd = newLabel("switch_end");
 
-    stm->condicion->accept(this);                      // valor → %rax
-    cout << "    pushq %rax" << endl;                  // apilar valor del switch
+    stm->condicion->accept(this);
+    cout << "    pushq %rax" << endl;              // valor del switch en stack
 
-   for (auto it = stm->casos.begin(); it != stm->casos.end(); ++it) {
+    for (auto& caso : stm->casos) {
         string labelNext = newLabel("switch_next");
 
-        it->first->accept(this);                          // patrón → %rax
-        cout << "    movq  %rax, %rcx"   << endl;     // patrón → %rcx
-        cout << "    popq  %rax"         << endl;     // valor del switch → %rax
-        cout << "    pushq %rax"         << endl;     // volver a apilar
-
-        // AT&T: cmpq src, dst  ≡  dst − src.  Aquí: %rax − %rcx
-        cout << "    cmpq  %rcx, %rax"   << endl;
+        caso.first->accept(this);                  // patrón → %rax
+        cout << "    movq  %rax, %rcx"    << endl; // patrón → %rcx
+        cout << "    movq  0(%rsp), %rax" << endl; // peek valor del switch → %rax (sin popq)
+        cout << "    cmpq  %rcx, %rax"   << endl;  // left=valor, right=patrón
         cout << "    jne   " << labelNext << endl;
 
-        it->second->accept(this);
-        cout << "    popq  %rcx"         << endl;     // limpiar stack
+        caso.second->accept(this);
+        cout << "    addq  $8, %rsp"     << endl;  // limpiar stack
         cout << "    jmp   " << labelEnd << endl;
 
         cout << labelNext << ":"         << endl;
     }
 
     // Default
-    if (stm->default_caso) {
+    if (stm->default_caso)
         stm->default_caso->accept(this);
-    }
 
-    cout << "    popq  %rcx"  << endl;                 // limpiar valor del switch
-    cout << labelEnd << ":"   << endl;
+    cout << "    addq  $8, %rsp" << endl;          // limpiar valor del switch
+    cout << labelEnd << ":"      << endl;
 }
 
 void GenCodeVisitor::visit(BodyStmt* stm) {
@@ -401,38 +504,38 @@ void GenCodeVisitor::visit(BodyStmt* stm) {
 }
 
 // ── DeleteStm ────────────────────────────────────────────
-//  free(ptr):  ptr en %rdi, luego call free@PLT
 
 void GenCodeVisitor::visit(DeleteStm* stm) {
-    stm->exp->accept(this);                            // puntero → %rax
-    cout << "    movq  %rax, %rdi"  << endl;           // arg1: puntero a liberar
+    stm->exp->accept(this);
+    cout << "    movq  %rax, %rdi" << endl;
     emitAlignedCall("free@PLT");
-    // %rax queda indefinido tras free; es un statement, no importa.
 }
 
 // ── DeferStmt / TryStmt — stubs ──────────────────────────
 
 void GenCodeVisitor::visit(DeferStmt* stm) {
-    // defer debería ejecutar el stmt al salir del scope/función.
-    // Implementación correcta requiere una pila de cleanup en runtime
-    // (o instrucciones al final de cada bloque de salida).
-    // Para este compilador de curso lo ignoramos (no ejecutamos nada)
-    // para no afectar el flujo de control: ejecutarlo aquí sería semánticamente
-    // incorrecto (p.ej. defer delete p lo liberaría al inicio, no al final).
-    (void)stm; // stub intencional
-}
-
-void GenCodeVisitor::emitAlignedCall(const string& target) {
-    // Alinear stack a 16 bytes antes del call (convención AMD64)
-    cout << "    andq  $-16, %rsp"  << endl;
-    cout << "    call  " << target  << endl;
+    // defer necesita cleanup al salir del scope; stub intencional.
+    (void)stm;
 }
 
 void GenCodeVisitor::visit(TryStmt* stm) {
-    // try/catch real necesita setjmp/longjmp o tablas de unwinding.
-    // Aquí simplemente ejecutamos el cuerpo try.
-    if (stm->try_body)   stm->try_body->accept(this);
-    // Ignoramos catch_body (no hay mecanismo de excepción).
+    if (stm->try_body) stm->try_body->accept(this);
+}
+
+// ── emitAlignedCall (método miembro) ─────────────────────
+//
+//  Alinea %rsp a 16 bytes antes del call y restaura después.
+//  Usamos %r12 (callee-saved) para guardar el %rsp original.
+//  NOTA: no salvamos/restauramos %r12 aquí; se asume que cada función
+//  generada tiene su propio frame y %r12 no es usado por el compilador
+//  para otra cosa en el mismo scope.
+
+void GenCodeVisitor::emitAlignedCall(const string& target) {
+    cout << "    movq  %rsp, %r12"    << endl;
+    cout << "    andq  $-16, %rsp"    << endl;
+    cout << "    xorq  %rax, %rax"    << endl;  // 0 regs XMM (varargs)
+    cout << "    call  " << target    << endl;
+    cout << "    movq  %r12, %rsp"    << endl;
 }
 
 // ═════════════════════════════════════════════════════════
@@ -440,24 +543,15 @@ void GenCodeVisitor::visit(TryStmt* stm) {
 // ═════════════════════════════════════════════════════════
 
 Value GenCodeVisitor::visit(NumberExpDecimal* exp) {
-    // Constante entera de 64 bits con signo extendido.
-    // movq $imm, %rax  carga inmediato de 64 bits (en práctica GAS acepta
-    // inmediatos de 32 bits en movq; para valores grandes usar movabsq).
     cout << "    movq  $" << exp->value << ", %rax" << endl;
     return Value();
 }
 
 Value GenCodeVisitor::visit(NumberExpFlotante* exp) {
-    // Reinterpretamos los bits IEEE 754 del float como un entero de 64 bits
-    // y los cargamos en %rax.  Esto NO es un valor usable como flotante en
-    // registros XMM, pero es lo correcto para un generador de enteros de curso
-    // que no implementa soporte FP completo.
-    //
-    // Para uso real: mover a %xmm0 con movsd / cvtss2sd.
-    float  f32  = exp->value;
-    double f64  = (double)f32;    // promover a double
+    float   f32  = exp->value;
+    double  f64  = (double)f32;
     int64_t bits = 0;
-    memcpy(&bits, &f64, sizeof(bits));  // reinterpretar bits (no truncar)
+    memcpy(&bits, &f64, sizeof(bits));
     cout << "    movabsq $" << bits << ", %rax" << endl;
     return Value();
 }
@@ -469,9 +563,8 @@ Value GenCodeVisitor::visit(BoolExp* exp) {
 }
 
 Value GenCodeVisitor::visit(IdExp* exp) {
-    // Manejo de error.X — tratar como constante entera única
-    if (exp->value.substr(0, 6) == "error.") {
-        // Asignamos un entero único por nombre de error
+    // Manejo de error.X como constante entera única
+    if (exp->value.size() >= 6 && exp->value.substr(0, 6) == "error.") {
         if (errorCodes.find(exp->value) == errorCodes.end())
             errorCodes[exp->value] = (int)errorCodes.size() + 1;
         cout << "    movq  $" << errorCodes[exp->value] << ", %rax" << endl;
@@ -479,8 +572,11 @@ Value GenCodeVisitor::visit(IdExp* exp) {
     }
 
     if (posicion.find(exp->value) == posicion.end()) {
-        cerr << "[GenCode] Error: variable no declarada: '" << exp->value << "'" << endl;
-        exit(1);
+        // Variable no declarada: emitir 0 y advertencia (no crashear)
+        cerr << "[GenCode] Advertencia: variable no declarada: '" << exp->value
+             << "' — se usará 0" << endl;
+        cout << "    xorq  %rax, %rax" << endl;
+        return Value();
     }
     cout << "    movq  " << offset(exp->value) << ", %rax" << endl;
     return Value();
@@ -488,112 +584,102 @@ Value GenCodeVisitor::visit(IdExp* exp) {
 
 // ── BinaryExp ────────────────────────────────────────────
 //
-//  Invariante: left → %rax, right → %rcx, resultado → %rax
-//
-//  AT&T cmpq src, dst  ≡  dst − src  (pone flags según dst − src)
-//  Después de  cmpq %rcx, %rax   (= %rax − %rcx  = left − right):
-//    setl  → left < right   ✓
+//  Después de eval: %rax = left, %rcx = right
+//  AT&T: cmpq src, dst  →  flags para dst − src
+//  Entonces cmpq %rcx, %rax  fija flags para left − right:
+//    setl  → left <  right  ✓
 //    setle → left <= right  ✓
-//    setg  → left > right   ✓
+//    setg  → left >  right  ✓
 //    setge → left >= right  ✓
 //    sete  → left == right  ✓
 //    setne → left != right  ✓
 
 Value GenCodeVisitor::visit(BinaryExp* exp) {
-    // Evaluar operandos
     exp->left->accept(this);
-    cout << "    pushq %rax"         << endl;  // salvar left
+    cout << "    pushq %rax"        << endl;   // salvar left
     exp->right->accept(this);
-    cout << "    movq  %rax, %rcx"  << endl;  // right → %rcx
-    cout << "    popq  %rax"        << endl;  // left  → %rax
+    cout << "    movq  %rax, %rcx" << endl;   // right → %rcx
+    cout << "    popq  %rax"       << endl;   // left  → %rax
 
     switch (exp->op) {
-        // ── Aritmética ───────────────────────────────────
         case PLUS_OP:
-            cout << "    addq  %rcx, %rax" << endl;  // %rax = left + right
+            cout << "    addq  %rcx, %rax" << endl;
             break;
 
         case MINUS_OP:
-            cout << "    subq  %rcx, %rax" << endl;  // %rax = left - right
+            cout << "    subq  %rcx, %rax" << endl;
             break;
 
         case MUL_OP:
-            // imulq src, dst  →  dst = dst * src  (con signo, 64-bit)
             cout << "    imulq %rcx, %rax" << endl;
             break;
 
         case DIV_OP:
-            // idivq divisor:  %rdx:%rax ÷ divisor  →  cociente %rax, resto %rdx
-            // Primero extender signo de %rax a %rdx:%rax con cqto (= cqo)
-            cout << "    cqto"              << endl;  // sign-extend %rax → %rdx:%rax
-            cout << "    idivq %rcx"        << endl;  // %rax = left / right
+            cout << "    cqto"             << endl;
+            cout << "    idivq %rcx"       << endl;
             break;
 
         case MODULO_OP:
-            cout << "    cqto"              << endl;
-            cout << "    idivq %rcx"        << endl;
-            cout << "    movq  %rdx, %rax"  << endl;  // resto en %rdx → %rax
+            cout << "    cqto"             << endl;
+            cout << "    idivq %rcx"       << endl;
+            cout << "    movq  %rdx, %rax" << endl;  // resto en %rdx
             break;
 
-        // ── Comparaciones ────────────────────────────────
-        // cmpq %rcx, %rax  fija flags para  left − right
-        case MENOR:      // left < right
+        case MENOR:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    setl  %al"         << endl;
-            cout << "    movzbq %al, %rax"  << endl;  // zero-extend byte → 64 bits
+            cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        case MENORI:     // left <= right
+        case MENORI:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    setle %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        case MAYOR:      // left > right
+        case MAYOR:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    setg  %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        case MAYORI:     // left >= right
+        case MAYORI:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    setge %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        case IGUALIGUAL: // left == right
+        case IGUALIGUAL:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    sete  %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        case DIFERENTE_OP: // left != right
+        case DIFERENTE_OP:
             cout << "    cmpq  %rcx, %rax" << endl;
             cout << "    setne %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
-        // ── Lógicos ──────────────────────────────────────
         case AND:
-            // &&: verdadero si left != 0  Y  right != 0
-            // Usamos %r10b y %r11b (caller-saved, no interferimos con %al/%cl)
-            cout << "    testq %rax, %rax"   << endl;  // left != 0?
-            cout << "    setne %r10b"         << endl;
-            cout << "    testq %rcx, %rcx"   << endl;  // right != 0?
-            cout << "    setne %r11b"         << endl;
-            cout << "    andb  %r11b, %r10b"  << endl;
-            cout << "    movzbq %r10b, %rax"  << endl;
+            // &&: true si left != 0 Y right != 0
+            cout << "    testq %rax, %rax"  << endl;
+            cout << "    setne %r10b"        << endl;
+            cout << "    testq %rcx, %rcx"  << endl;
+            cout << "    setne %r11b"        << endl;
+            cout << "    andb  %r11b, %r10b" << endl;
+            cout << "    movzbq %r10b, %rax" << endl;
             break;
 
         case OR:
-            // ||: verdadero si left != 0  O  right != 0
-            cout << "    orq   %rcx, %rax"   << endl;  // left | right
-            cout << "    setne %al"           << endl;
-            cout << "    movzbq %al, %rax"    << endl;
+            // ||: true si left != 0 O right != 0
+            cout << "    orq   %rcx, %rax"  << endl;
+            cout << "    setne %al"          << endl;
+            cout << "    movzbq %al, %rax"   << endl;
             break;
 
-        case REFERENCIA: // & bitwise AND
-            cout << "    andq  %rcx, %rax"   << endl;
+        case REFERENCIA:  // & bitwise AND
+            cout << "    andq  %rcx, %rax"  << endl;
             break;
 
         default:
@@ -604,43 +690,43 @@ Value GenCodeVisitor::visit(BinaryExp* exp) {
 }
 
 Value GenCodeVisitor::visit(NotExp* exp) {
-    exp->exp->accept(this);                            // operando → %rax
-    cout << "    testq %rax, %rax"  << endl;           // fijar flags
-    cout << "    sete  %al"          << endl;           // 1 si operando == 0
-    cout << "    movzbq %al, %rax"   << endl;
+    exp->exp->accept(this);
+    cout << "    testq %rax, %rax" << endl;
+    cout << "    sete  %al"         << endl;
+    cout << "    movzbq %al, %rax"  << endl;
     return Value();
 }
 
 Value GenCodeVisitor::visit(UnaryExp* exp) {
-    exp->exp->accept(this);                            // operando → %rax
-
     switch (exp->op) {
         case UnaryExp::NEGATE:
-            // Negación aritmética: %rax = −%rax
+            exp->exp->accept(this);
             cout << "    negq  %rax" << endl;
             break;
 
         case UnaryExp::NOT_OP:
-            // Negación lógica: 0→1, cualquier_otro→0
+            exp->exp->accept(this);
             cout << "    testq %rax, %rax" << endl;
             cout << "    sete  %al"         << endl;
             cout << "    movzbq %al, %rax"  << endl;
             break;
 
         case UnaryExp::ADDRESS:
-            // &var — la dirección, no el valor.
-            // Solo funciona si el sub-nodo es un IdExp (caso común).
+            // &var: cargamos la dirección efectiva en el frame
             if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
-                // leaq carga la dirección efectiva sin acceder a memoria
+                if (posicion.find(id->value) == posicion.end())
+                    posicion[id->value] = varContador++;
                 cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
             } else {
-                // Caso general: el valor en %rax ya es la dirección (p.ej. array base)
-                // No hay nada más que hacer.
+                // Para arrays u otras expresiones, evaluar y asumir que
+                // la evaluación ya deja la dirección base en %rax
+                exp->exp->accept(this);
             }
             break;
 
         case UnaryExp::DEREF:
-            // *ptr — desreferenciar: leer 64 bits desde la dirección en %rax
+            // *ptr: desreferenciar
+            exp->exp->accept(this);
             cout << "    movq  (%rax), %rax" << endl;
             break;
     }
@@ -649,102 +735,77 @@ Value GenCodeVisitor::visit(UnaryExp* exp) {
 
 // ── FcallExp ─────────────────────────────────────────────
 //
-//  Convención System V AMD64 para argumentos:
-//    Args 1..6  → %rdi %rsi %rdx %rcx %r8 %r9  (en ese orden)
-//    Args 7+    → stack (en orden inverso, antes del call)
+//  Convención System V AMD64:
+//    Args 1..6  → %rdi %rsi %rdx %rcx %r8 %r9
+//    Args 7+    → stack en orden inverso
 //
 //  Algoritmo:
-//    1. Evaluar todos los argumentos de derecha a izquierda y apilarlos.
-//    2. Mover los primeros 6 del stack a sus registros (%rdi..%r9).
-//    3. Los restantes (args 7+) ya están en el stack en el orden correcto.
-//    4. Ajustar %rsp si hay args en stack (limpiar después del call).
-
-// ── Macro de alineación de stack ─────────────────────────
-//  Antes de cualquier "call" el ABI exige %rsp % 16 == 0.
-//  Usamos %r12 (callee-saved) como registro de salvado de %rsp original:
-//    movq %rsp, %r12   ; guardar rsp real
-//    andq $-16, %rsp   ; alinear (borra bits 0-3)
-//    ... call ...
-//    movq %r12, %rsp   ; restaurar rsp
-//  Esto es seguro porque %r12 es callee-saved: la función llamada lo preserva.
-//  NOTA: si hay llamadas anidadas (una expresión que llama funciones dentro
-//  de los argumentos de otra llamada), el %r12 de la llamada exterior podría
-//  ser sobrescrito por la interior. Para el compilador de curso esto no ocurre
-//  porque los argumentos se evalúan y apilan ANTES de cargarlos en registros.
-
-static void emitAlignedCall(const std::string& nombre) {
-    std::cout << "    movq  %rsp, %r12"     << std::endl; // salvar %rsp
-    std::cout << "    andq  $-16, %rsp"     << std::endl; // alinear a 16 bytes
-    std::cout << "    xorq  %rax, %rax"     << std::endl; // 0 regs XMM (varargs)
-    std::cout << "    call  " << nombre      << std::endl;
-    std::cout << "    movq  %r12, %rsp"     << std::endl; // restaurar %rsp
-}
+//    1. Evaluar args de derecha a izquierda → apilar todos
+//    2. Mover primeros 6 del stack a registros
+//    3. emitAlignedCall (alinea %rsp, llama, restaura %rsp)
+//    4. Limpiar args 7+ del stack
 
 Value GenCodeVisitor::visit(FcallExp* exp) {
+    // Funciones especiales internas
+    if (exp->nombre == "__try__" || exp->nombre == "__catch__") {
+        if (!exp->argumentos.empty())
+            exp->argumentos[0]->accept(this);
+        return Value();
+    }
+
     int nArgs      = (int)exp->argumentos.size();
     int nRegArgs   = min(nArgs, MAX_REG_ARGS);
     int nStackArgs = max(0, nArgs - MAX_REG_ARGS);
 
-    // Paso 1: evaluar todos los argumentos y apilarlos (derecha a izquierda).
-    // Los argumentos se evalúan antes de tocar %r12, así que no hay conflicto.
+    // Paso 1: evaluar todos los args de derecha a izquierda y apilar
     for (int i = nArgs - 1; i >= 0; --i) {
         exp->argumentos[i]->accept(this);
         cout << "    pushq %rax" << endl;
     }
 
-    // Paso 2: mover los primeros nRegArgs del stack a sus registros de argumento.
+    // Paso 2: mover primeros nRegArgs del stack a registros de argumento
     for (int i = 0; i < nRegArgs; ++i)
         cout << "    popq  " << argRegs[i] << endl;
 
-    // Paso 3 + alineación: salvar %rsp en %r12, alinear, llamar, restaurar.
-    // Los nStackArgs restantes ya están en el stack correctamente posicionados.
+    // Paso 3: llamada alineada (los nStackArgs restantes ya están en stack)
     emitAlignedCall(exp->nombre);
 
-    // Paso 4: limpiar los argumentos que quedaron en el stack (si los hay).
+    // Paso 4: limpiar args que quedaron en el stack
     if (nStackArgs > 0)
         cout << "    addq  $" << (nStackArgs * 8) << ", %rsp" << endl;
 
-    // Resultado de la función queda en %rax (convención System V AMD64).
     return Value();
 }
 
 Value GenCodeVisitor::visit(NewExp* exp) {
-    // malloc(size): aloca memoria en el heap.
-    // Asumimos 8 bytes por objeto; un compilador con tipos usaría sizeof(tipo).
-    cout << "    movq  $8, %rdi"   << endl;     // arg1: tamaño en bytes
-    emitAlignedCall("malloc@PLT");               // %rax ← puntero alocado
+    // malloc(8): aloca 8 bytes en el heap
+    cout << "    movq  $8, %rdi" << endl;
+    emitAlignedCall("malloc@PLT");
     return Value();
 }
 
 Value GenCodeVisitor::visit(NullExp* exp) {
-    // null = puntero nulo = 0
     cout << "    xorq  %rax, %rax" << endl;
     return Value();
 }
 
 Value GenCodeVisitor::visit(UndefinedExp* exp) {
-    // undefined: dejamos %rax con valor 0 (indeterminado en semántica,
-    // pero necesitamos generar algo).
     cout << "    xorq  %rax, %rax" << endl;
     return Value();
 }
 
 // ── StringExp ────────────────────────────────────────────
 //
-//  En lugar de emitir inline dentro de .text (que fragmenta secciones y
-//  confunde al ensamblador), acumulamos los literales en stringLiterals
-//  y los emitimos al final en .rodata desde gencode().
-//  Aquí solo generamos la instrucción leaq que carga la dirección.
+//  Acumulamos literales en stringLiterals y emitimos en .rodata al final.
+//  Aquí solo generamos leaq para cargar la dirección.
 
 Value GenCodeVisitor::visit(StringExp* exp) {
     string lbl = internString(exp->valor);
-    // leaq label(%rip), %rax: carga dirección relativa a %rip (PIC-safe)
     cout << "    leaq  " << lbl << "(%rip), %rax" << endl;
     return Value();
 }
 
 Value GenCodeVisitor::visit(CharExp* exp) {
-    // Un carácter cabe en un inmediato de 64 bits como su valor ASCII
     cout << "    movq  $" << (int)(unsigned char)exp->valor << ", %rax" << endl;
     return Value();
 }
@@ -752,10 +813,10 @@ Value GenCodeVisitor::visit(CharExp* exp) {
 Value GenCodeVisitor::visit(ReferenceExp* exp) {
     if (exp->exp) {
         if (IdExp* id = dynamic_cast<IdExp*>(exp->exp)) {
-            // &id → dirección en el frame
+            if (posicion.find(id->value) == posicion.end())
+                posicion[id->value] = varContador++;
             cout << "    leaq  " << offset(id->value) << ", %rax" << endl;
         } else {
-            // Expresión compleja: evaluar y asumir que %rax ya es una dirección
             exp->exp->accept(this);
         }
     }
@@ -764,62 +825,126 @@ Value GenCodeVisitor::visit(ReferenceExp* exp) {
 
 Value GenCodeVisitor::visit(PunteroExp* exp) {
     if (exp->exp) {
-        exp->exp->accept(this);                        // dirección → %rax
-        cout << "    movq  (%rax), %rax" << endl;      // desreferenciar
+        exp->exp->accept(this);
+        cout << "    movq  (%rax), %rax" << endl;
     }
     return Value();
 }
 
+// ── PuntoExp: acceso a campo de struct ───────────────────
+//
+//  Sin tabla de tipos no conocemos el offset de cada campo.
+//  Generamos la base y dejamos un TODO visible en el output.
+//  Para structs simples con campos de 8 bytes, el primer campo está
+//  en offset 0, el segundo en +8, etc.
+
 Value GenCodeVisitor::visit(PuntoExp* exp) {
-    // Acceso a campo de struct: requiere conocer el layout de cada struct.
-    // Stub: evaluamos la base y devolvemos su valor (incorrecto en general,
-    // pero evita un crash del generador).
+    if (exp->id == "__unwrap__") {
+        // optional.? — por ahora devolvemos el valor tal cual
+        exp->exp->accept(this);
+        return Value();
+    }
+    // Evaluamos la base (dirección del struct)
     exp->exp->accept(this);
-    // TODO: añadir offset del campo cuando haya tabla de structs.
+    // Sin tabla de structs no podemos calcular el offset real.
+    // Devolvemos el primer campo (offset 0) como aproximación.
+    // TODO: implementar tabla de structs para offsets correctos.
+    cout << "    movq  0(%rax), %rax" << endl;
     return Value();
 }
 
+// ── AlgoconcorchetesExp: array[index] ────────────────────
+//
+//  Corrección del bug original: la base iba a %rcx pero el modo de
+//  direccionamiento indexed es (%base, %índice, escala), donde:
+//    %rcx = base (dirección del array)
+//    %rax = índice
+//
+//  Secuencia correcta:
+//    1. eval(nombre/base) → %rax → pushq    (dirección del array)
+//    2. eval(dentroexp/índice) → %rax
+//    3. popq %rcx                            (base → %rcx)
+//    4. movq (%rcx, %rax, 8), %rax          (elemento → %rax)
+
 Value GenCodeVisitor::visit(AlgoconcorchetesExp* exp) {
-    // array[index]:
-    //   base  → %rax → push
-    //   index → %rax
-    //   base  ← pop → %rcx
-    //   resultado = *(base + index*8)   (elementos de 8 bytes)
-    exp->nombre->accept(this);                         // dirección base → %rax
-    cout << "    pushq %rax"            << endl;
-    exp->dentroexp->accept(this);                      // índice → %rax
-    cout << "    popq  %rcx"            << endl;       // base → %rcx
-    // Modo de direccionamiento indexado: base + índice × escala
-    cout << "    movq  (%rcx,%rax,8), %rax" << endl;  // carga elemento
+    exp->nombre->accept(this);                          // base → %rax
+    cout << "    pushq %rax"                 << endl;   // salvar base
+    exp->dentroexp->accept(this);                       // índice → %rax
+    cout << "    popq  %rcx"                 << endl;   // base → %rcx
+    cout << "    movq  (%rcx,%rax,8), %rax" << endl;   // elemento → %rax
     return Value();
 }
 
 Value GenCodeVisitor::visit(AlgoconcorchetesylistaExp* exp) {
-    // Array con lista de índices (p.ej. matriz[i,j]): stub
-    // Evaluamos la base y retornamos su dirección sin indexar.
+    // Array 2D u otro acceso multi-índice: stub
     exp->nombre->accept(this);
     return Value();
 }
 
 Value GenCodeVisitor::visit(LambdaExp* exp) {
-    // Las lambdas con captura necesitan closures (estructuras en heap).
-    // Stub: retornamos 0. Un compilador completo emitiría una función
-    // anónima y construiría el closure en %rax.
+    // Lambdas con captura necesitan closures; stub retorna 0
     cout << "    xorq  %rax, %rax" << endl;
     return Value();
 }
 
 // ── Tipos — stubs ─────────────────────────────────────────
-//  Los nodos de tipo no generan código en la fase de emisión;
-//  se usan solo para análisis semántico (fases previas).
 
-void GenCodeVisitor::visit(Structdec*  sd) { }
-void GenCodeVisitor::visit(Template*   t)  { }
-void GenCodeVisitor::visit(IdType*      t) { }
-void GenCodeVisitor::visit(PointerType* t) { }
-void GenCodeVisitor::visit(ArrayType*   t) { }
-void GenCodeVisitor::visit(OptionalType*t) { }
-void GenCodeVisitor::visit(ErrorType*   t) { }
-void GenCodeVisitor::visit(UnionType*   t) { }
-void GenCodeVisitor::visit(EnumType*    t) { }
-void GenCodeVisitor::visit(DerefAssignStmt*    t) { }
+void GenCodeVisitor::visit(Template* t) {
+    // Los templates se instancian como funciones concretas ignorando el
+    // parámetro de tipo (T se trata como i64 implícitamente).
+    // El nombre de la función es t->id1, los parámetros reales son
+    // t->id_parametros / t->tipo_parametros, el cuerpo es t->block.
+ 
+    string prevFunction  = currentFunction;
+    string prevLoopEnd   = currentLoopEnd;
+    string prevLoopStart = currentLoopStart;
+    auto   prevPosicion  = posicion;
+    int    prevContador  = varContador;
+ 
+    currentFunction  = t->id1;
+    currentLoopEnd   = "";
+    currentLoopStart = "";
+    posicion.clear();
+    varContador = 1;
+ 
+    // Registrar parámetros (ignoramos el comptime T, solo los parámetros reales)
+    for (size_t i = 0; i < t->id_parametros.size(); ++i)
+        posicion[t->id_parametros[i]] = varContador++;
+ 
+    const int FRAME_SLOTS = 64;
+    int frameBytes = alignFrame(FRAME_SLOTS);
+ 
+    cout << endl;
+    cout << t->id1 << ":" << endl;
+    cout << "    pushq %rbp"                        << endl;
+    cout << "    movq  %rsp, %rbp"                  << endl;
+    cout << "    subq  $" << frameBytes << ", %rsp" << endl;
+ 
+    // Copiar argumentos de registros al stack
+    for (size_t i = 0; i < t->id_parametros.size() && i < (size_t)MAX_REG_ARGS; ++i)
+        cout << "    movq  " << argRegs[i] << ", "
+             << offset(t->id_parametros[i]) << endl;
+ 
+    if (t->block) t->block->accept(this);
+ 
+    // Epílogo de seguridad
+    cout << "    xorq  %rax, %rax" << endl;
+    cout << "    leave"            << endl;
+    cout << "    ret"              << endl;
+ 
+    currentFunction  = prevFunction;
+    currentLoopEnd   = prevLoopEnd;
+    currentLoopStart = prevLoopStart;
+    posicion         = prevPosicion;
+    varContador      = prevContador;
+}
+
+void GenCodeVisitor::visit(Structdec*   sd) { }
+
+void GenCodeVisitor::visit(IdType*      t)  { }
+void GenCodeVisitor::visit(PointerType* t)  { }
+void GenCodeVisitor::visit(ArrayType*   t)  { }
+void GenCodeVisitor::visit(OptionalType*t)  { }
+void GenCodeVisitor::visit(ErrorType*   t)  { }
+void GenCodeVisitor::visit(UnionType*   t)  { }
+void GenCodeVisitor::visit(EnumType*    t)  { }

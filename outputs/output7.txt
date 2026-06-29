@@ -14,7 +14,21 @@ print_str_fmt:  .string "%s\n"
 exprs:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
+    movq  $8, %rdi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  malloc@PLT
+    movq  %r12, %rsp
+    movq  %rax, -8(%rbp)
+    movq  $8, %rdi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  malloc@PLT
+    movq  %r12, %rsp
+    movq  %rax, -16(%rbp)
     movq  $1, %rax
     pushq %rax
     movq  $2, %rax
@@ -44,7 +58,7 @@ exprs:
     movq  %rax, %rcx
     popq  %rax
     subq  %rcx, %rax
-    movq  %rax, -8(%rbp)
+    movq  %rax, -24(%rbp)
     movq  $1, %rax
     testq %rax, %rax
     sete  %al
@@ -66,8 +80,8 @@ exprs:
     orq   %rcx, %rax
     setne %al
     movzbq %al, %rax
-    movq  %rax, -16(%rbp)
-    movq  -8(%rbp), %rax
+    movq  %rax, -32(%rbp)
+    movq  -24(%rbp), %rax
     pushq %rax
     movq  $1, %rax
     movq  %rax, %rcx
@@ -76,7 +90,7 @@ exprs:
     sete  %al
     movzbq %al, %rax
     pushq %rax
-    movq  -8(%rbp), %rax
+    movq  -24(%rbp), %rax
     pushq %rax
     movq  $2, %rax
     movq  %rax, %rcx
@@ -90,7 +104,7 @@ exprs:
     setne %al
     movzbq %al, %rax
     pushq %rax
-    movq  -8(%rbp), %rax
+    movq  -24(%rbp), %rax
     pushq %rax
     movq  $5, %rax
     movq  %rax, %rcx
@@ -106,22 +120,68 @@ exprs:
     setne %r11b
     andb  %r11b, %r10b
     movzbq %r10b, %rax
-    movq  %rax, -24(%rbp)
-    movq  -8(%rbp), %rax
-    negq  %rax
-    movq  %rax, -32(%rbp)
-    movq  -8(%rbp), %rax
-    leaq  -8(%rbp), %rax
     movq  %rax, -40(%rbp)
-    movq  -40(%rbp), %rax
-    movq  (%rax), %rax
+    movq  -24(%rbp), %rax
+    negq  %rax
     movq  %rax, -48(%rbp)
-    movq  $8, %rdi
-    andq  $-16, %rsp
-    call  malloc@PLT
+    leaq  -24(%rbp), %rax
     movq  %rax, -56(%rbp)
     movq  -56(%rbp), %rax
+    movq  (%rax), %rax
     movq  %rax, -64(%rbp)
+    movq  -16(%rbp), %rax
+    movq  0(%rax), %rax
+    movq  %rax, -72(%rbp)
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    popq  %rcx
+    movq  (%rcx,%rax,8), %rax
+    movq  %rax, -80(%rbp)
+    xorq  %rax, %rax
+    movq  %rax, -88(%rbp)
+    movq  -88(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    orq   %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    movq  %rax, -96(%rbp)
+    movq  -88(%rbp), %rax
+    movq  %rax, -104(%rbp)
+    movq  $3, %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  buscar
+    movq  %r12, %rsp
+    movq  %rax, -112(%rbp)
+    xorq  %rax, %rax
+    movq  %rax, -120(%rbp)
+    movq  -48(%rbp), %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  sumar
+    movq  %r12, %rsp
+    leave
+    ret
+    xorq  %rax, %rax
+    leave
+    ret
+
+.section .note.GNU-stack,"",@progbits
 
 === STDERR ===
-[GenCode] Error: variable no declarada: 'arr'

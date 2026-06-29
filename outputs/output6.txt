@@ -14,9 +14,51 @@ print_str_fmt:  .string "%s\n"
 control:
     pushq %rbp
     movq  %rsp, %rbp
-    subq  $256, %rsp
+    subq  $512, %rsp
     movq  $0, %rax
     movq  %rax, -8(%rbp)
+    movq  $8, %rdi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  malloc@PLT
+    movq  %r12, %rsp
+    movq  %rax, -16(%rbp)
+    movq  $10, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $0, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $20, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $1, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $30, %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    pushq %rax
+    movq  $2, %rax
+    imulq $8, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  $3, %rax
+    movq  %rax, -24(%rbp)
     movq  -8(%rbp), %rax
     pushq %rax
     movq  $0, %rax
@@ -31,7 +73,7 @@ control:
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
@@ -41,45 +83,71 @@ else_0:
     movq  %rsp, %r12
     andq  $-16, %rsp
     movq  %rax, %rsi
-    leaq  print_i64_fmt(%rip), %rdi
+    leaq  print_str_fmt(%rip), %rdi
     xorq  %rax, %rax
     call  printf@PLT
     movq  %r12, %rsp
 endif_1:
-while_start_4:
-    movq  -8(%rbp), %rax
+    movq  -16(%rbp), %rax
+    movq  %rax, -48(%rbp)
+    movq  $0, %rax
+    movq  %rax, -40(%rbp)
+for_start_4:
+    movq  -40(%rbp), %rax
+    movq  -48(%rbp), %rcx
+    movq  (%rcx,%rax,8), %rax
+    movq  %rax, -32(%rbp)
+    movq  -40(%rbp), %rax
     pushq %rax
-    movq  $10, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    cmpq  %rcx, %rax
-    setl  %al
-    movzbq %al, %rax
-    cmpq  $0, %rax
-    je    while_end_5
-    movq  -8(%rbp), %rax
-    pushq %rax
-    movq  $5, %rax
+    movq  -24(%rbp), %rax
     movq  %rax, %rcx
     popq  %rax
     cmpq  %rcx, %rax
     sete  %al
     movzbq %al, %rax
     cmpq  $0, %rax
-    je    else_6
-    jmp   while_end_5
-    jmp   endif_7
-else_6:
-endif_7:
-    movq  -8(%rbp), %rax
-    pushq %rax
-    movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    addq  %rcx, %rax
-    movq  %rax, -8(%rbp)
-    jmp   while_start_4
-while_end_5:
+    je    else_8
+    jmp   for_end_5
+    jmp   endif_9
+else_8:
+endif_9:
+    movq  -32(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    movq  -40(%rbp), %rax
+    addq  $1, %rax
+    movq  %rax, -40(%rbp)
+    jmp   for_start_4
+for_end_5:
+    xorq  %rax, %rax
+    leave
+    ret
+    xorq  %rax, %rax
+    leave
+    ret
+
+main:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  control
+    movq  %r12, %rsp
+    xorq  %rax, %rax
+    leave
+    ret
+
+.section .rodata
+LC_2: .string "cero"
+LC_3: .string "no cero"
+
+.section .note.GNU-stack,"",@progbits
 
 === STDERR ===
-[GenCode] Error: variable no declarada: 'arr'

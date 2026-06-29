@@ -11,6 +11,140 @@ print_str_fmt:  .string "%s\n"
 .section .text
 .globl main
 
+maximo:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  %rdi, -8(%rbp)
+    movq  %rsi, -16(%rbp)
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  -16(%rbp), %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    setg  %al
+    movzbq %al, %rax
+    cmpq  $0, %rax
+    je    else_0
+    movq  -8(%rbp), %rax
+    leave
+    ret
+    jmp   endif_1
+else_0:
+    movq  -16(%rbp), %rax
+    leave
+    ret
+endif_1:
+    xorq  %rax, %rax
+    leave
+    ret
+
+swap:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  %rdi, -8(%rbp)
+    movq  %rsi, -16(%rbp)
+    movq  -8(%rbp), %rax
+    movq  (%rax), %rax
+    movq  %rax, -24(%rbp)
+    movq  -16(%rbp), %rax
+    movq  (%rax), %rax
+    pushq %rax
+    leaq  -8(%rbp), %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    movq  -24(%rbp), %rax
+    pushq %rax
+    leaq  -16(%rbp), %rax
+    movq  %rax, %rcx
+    popq  %rdx
+    movq  %rdx, (%rcx)
+    xorq  %rax, %rax
+    leave
+    ret
+
+main:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $512, %rsp
+    movq  $7, %rax
+    pushq %rax
+    movq  $3, %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  maximo
+    movq  %r12, %rsp
+    movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    movq  $2, %rax
+    pushq %rax
+    movq  $10, %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  maximo
+    movq  %r12, %rsp
+    movq  %rax, -16(%rbp)
+    movq  -16(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    movq  $5, %rax
+    movq  %rax, -24(%rbp)
+    movq  $9, %rax
+    movq  %rax, -32(%rbp)
+    leaq  -32(%rbp), %rax
+    pushq %rax
+    leaq  -24(%rbp), %rax
+    pushq %rax
+    popq  %rdi
+    popq  %rsi
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  swap
+    movq  %r12, %rsp
+    movq  -24(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    movq  -32(%rbp), %rax
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_i64_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    xorq  %rax, %rax
+    leave
+    ret
+
 .section .note.GNU-stack,"",@progbits
 
 === STDERR ===

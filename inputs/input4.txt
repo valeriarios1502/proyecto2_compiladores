@@ -11,3 +11,16 @@ fn swap < type < T > > (a : *T, b : *T) : void {
   *a = *b;
   *b = tmp;
 }
+
+pub fn main () void {
+  var x = maximo(3, 7);
+  print(x);
+  var y = maximo(10, 2);
+  print(y);
+
+  var a = 5;
+  var b = 9;
+  swap(&a, &b);
+  print(a);
+  print(b);
+}

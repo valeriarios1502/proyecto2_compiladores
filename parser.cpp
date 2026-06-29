@@ -474,7 +474,20 @@ Stmt* Parser::parseStmt() {
                 Exp* idx = parseLogicExp();
                 expect(Token::RCORCHETE, "Se esperaba ']' en lvalue");
                 lval = new AlgoconcorchetesExp(lval, idx);
-            } else {
+            } else if (match(Token::LPAREN)) {
+    FcallExp* call = new FcallExp();
+    call->nombre = nombre;
+    delete lval;
+    lval = nullptr;
+    if (!check(Token::RPAREN)) {
+        call->argumentos.push_back(parseLogicExp());
+        while (match(Token::COMA))
+            call->argumentos.push_back(parseLogicExp());
+    }
+    expect(Token::RPAREN, "Se esperaba ')' en llamada");
+    match(Token::SEMICOL);
+    return new AsignStmt("__call__", call);  
+        }else {
                 break;
             }
         }
@@ -496,19 +509,12 @@ Stmt* Parser::parseStmt() {
 
     // Al inicio de parseStmt(), antes de los demás checks:
     if (match(Token::STAR)) {
-        // *expr = expr ;
-        Exp* lval = parsePostfix();          // desreferencia: *a
-        expect(Token::ASSIGN, "Se esperaba '=' después de expresión desreferenciada");
-        Exp* rval = parseExpr();
-        match(Token::SEMICOL);
-        // Reusar AsignStmt con nombre especial, o crear DerefAssignStmt
-        // Workaround con lo que ya tienes:
-        FcallExp* f = new FcallExp();
-        f->nombre = "__deref_assign__";
-        f->argumentos.push_back(lval);
-        f->argumentos.push_back(rval);
-        return new ReturnStm(f);  // placeholder, ajusta según tu AST
-    }
+    Exp* lval = parsePostfix();
+    expect(Token::ASSIGN, "Se esperaba '=' después de expresión desreferenciada");
+    Exp* rval = parseExpr();
+    match(Token::SEMICOL);
+    return new DerefAssignStmt(lval, rval);  // ← CORRECTO
+}
 
     throw runtime_error("Error sintáctico: sentencia inesperada - token: '" 
     + current->text + "' tipo: " + to_string(current->type) 
