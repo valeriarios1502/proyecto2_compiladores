@@ -8,11 +8,8 @@
 #include <string>
 #include <vector>
 #include "environment.h"
-#include "ConstantFoldingVisitor.h"
-#include "Sethi-UllmanVisitor.h"
-#include "PeepholeVisitor.h"
 
-// ── forward declarations ──────────────────────────────────────────────────────
+
 class BinaryExp;
 class NumberExpDecimal;
 class NumberExpFlotante;
@@ -60,14 +57,23 @@ class EnumType;
 class Body;
 class Programa;
 
-// =============================================================================
+
+// Constant Folding
+struct CFValue {
+    bool      is_const = false;
+    long long int_val  = 0;
+    double    dbl_val  = 0.0;
+ 
+    CFValue() = default;
+    explicit CFValue(long long v) : is_const(true), int_val(v),    dbl_val((double)v) {}
+    explicit CFValue(double    v) : is_const(true), int_val((long long)v), dbl_val(v) {}
+};
+
 //   Visitor — clase base abstracta
-// =============================================================================
 class Visitor {
 public:
     virtual ~Visitor() = default;
 
-    // Expresiones → retornan Value
     virtual Value visit(BinaryExp* exp)                = 0;
     virtual Value visit(NumberExpDecimal* exp)          = 0;
     virtual Value visit(NumberExpFlotante* exp)         = 0;
@@ -88,7 +94,7 @@ public:
     virtual Value visit(PuntoExp* exp)                  = 0;
     virtual Value visit(LambdaExp* exp)                 = 0;
 
-    // Statements → retornan void
+
     virtual void visit(IfStmt* stm)        = 0;
     virtual void visit(WhileStmt* stm)     = 0;
     virtual void visit(BodyStmt* stm)      = 0;
@@ -104,14 +110,14 @@ public:
     virtual void visit(ForStmt* stm)       = 0;
     virtual void visit(DerefAssignStmt* e) = 0;
 
-    // Declaraciones → retornan void
+
     virtual void visit(Fundec* fd)    = 0;
     virtual void visit(Structdec* sd) = 0;
     virtual void visit(VarDec* vd)    = 0;
     virtual void visit(ConstDec* cd)  = 0;
     virtual void visit(Template* t)   = 0;
 
-    // Tipos → retornan void
+
     virtual void visit(IdType* tipo)       = 0;
     virtual void visit(PointerType* tipo)  = 0;
     virtual void visit(ArrayType* tipo)    = 0;
@@ -120,40 +126,15 @@ public:
     virtual void visit(UnionType* tipo)    = 0;
     virtual void visit(EnumType* tipo)     = 0;
 
-    // Body / Programa
+
     virtual void visit(Body* b)     = 0;
     virtual void visit(Programa* p) = 0;
 };
 
-// =============================================================================
 //   GenCodeVisitor — generación de código x86-64 AT&T
-//
-//  Convenciones System V AMD64:
-//   Caller-saved : %rax %rcx %rdx %rsi %rdi %r8 %r9 %r10 %r11
-//   Callee-saved : %rbx %rbp %r12 %r13 %r14 %r15
-//   Argumentos   : %rdi %rsi %rdx %rcx %r8 %r9  (en ese orden)
-//   Retorno      : %rax
-//
-//  Variables locales:
-//   posicion["x"] = N  →  slot N  →  -N*8(%rbp)
-//
-//  Structs:
-//   structFieldOffsets[nombreStruct][campo] = byteOffset  (i*8 para campo i)
-//   structFieldCount[nombreStruct]          = número de campos
-//   Una instancia local ocupa nFields slots consecutivos en el frame.
-//   El slot posicion["v"] almacena la DIRECCIÓN BASE del struct
-//   (puesta con leaq en VarDec, o con malloc en NewExp).
-//
-//  Arrays:
-//   Locales ([N]T): N slots consecutivos; posicion["a"] = slot del elemento 0.
-//   El slot almacena la dirección base (leaq -baseSlot*8(%rbp), %rax).
-//   En heap (new [N]T): malloc(N*8), dirección en %rax → guardada en slot.
-// =============================================================================
 class GenCodeVisitor : public Visitor {
 public:
     bool hayComptimeGlobal = false;
-    ConstMap constMap;   // llenado por ConstantFoldingPass
-    ShuMap   shuMap;     // llenado por SethiUllmanPass
 
     std::unordered_map<std::string, std::string> globalTypes; // nombre → "int"|"float"|"str"|"char"|"bool"
     std::unordered_set<std::string> globalNames;  
@@ -234,9 +215,7 @@ public:
     void emitGlobalVarDec(VarDec* vd);
     void emitGlobalConstDec(ConstDec* cd);
 
-    // =========================================================================
-    //  Visitas — Expresiones
-    // =========================================================================
+
     Value visit(BinaryExp* exp)                override;
     Value visit(NumberExpDecimal* exp)          override;
     Value visit(NumberExpFlotante* exp)         override;
@@ -257,9 +236,7 @@ public:
     Value visit(PuntoExp* exp)                  override;
     Value visit(LambdaExp* exp)                 override;
 
-    // =========================================================================
-    //  Visitas — Statements
-    // =========================================================================
+
     void visit(IfStmt* stm)        override;
     void visit(WhileStmt* stm)     override;
     void visit(BodyStmt* stm)      override;
@@ -275,18 +252,16 @@ public:
     void visit(ForStmt* stm)       override;
     void visit(DerefAssignStmt* stm) override;
 
-    // =========================================================================
-    //  Visitas — Declaraciones
-    // =========================================================================
+
+
     void visit(Fundec* fd)    override;
     void visit(Structdec* sd) override;
     void visit(VarDec* vd)    override;
     void visit(ConstDec* cd)  override;
     void visit(Template* t)   override;
 
-    // =========================================================================
-    //  Visitas — Tipos (stubs, no generan código)
-    // =========================================================================
+ 
+
     void visit(IdType* tipo)       override;
     void visit(PointerType* tipo)  override;
     void visit(ArrayType* tipo)    override;
@@ -295,11 +270,289 @@ public:
     void visit(UnionType* tipo)    override;
     void visit(EnumType* tipo)     override;
 
-    // =========================================================================
-    //  Visitas — Body / Programa
-    // =========================================================================
+
     void visit(Body* b)     override;
     void visit(Programa* p) override;
 };
+
+
+
+//  ConstantFolding
+class ConstantFolding : public Visitor {
+public:
+    std::unordered_map<std::string, CFValue> cfEnv;
+ 
+    // helpers privados que devuelven CFValue
+    CFValue fold(Exp* e);
+ 
+   
+    Value visit(BinaryExp*                 exp) override;
+    Value visit(NumberExpDecimal*          exp) override;
+    Value visit(NumberExpFlotante*         exp) override;
+    Value visit(StringExp*                 exp) override;
+    Value visit(CharExp*                   exp) override;
+    Value visit(IdExp*                     exp) override;
+    Value visit(BoolExp*                   exp) override;
+    Value visit(NotExp*                    exp) override;
+    Value visit(FcallExp*                  exp) override;
+    Value visit(UnaryExp*                  exp) override;
+    Value visit(NewExp*                    exp) override;
+    Value visit(NullExp*                   exp) override;
+    Value visit(UndefinedExp*              exp) override;
+    Value visit(ReferenceExp*              exp) override;
+    Value visit(PunteroExp*                exp) override;
+    Value visit(AlgoconcorchetesylistaExp* exp) override;
+    Value visit(AlgoconcorchetesExp*       exp) override;
+    Value visit(PuntoExp*                  exp) override;
+    Value visit(LambdaExp*                 exp) override;
+ 
+
+    void visit(IfStmt*          stm) override;
+    void visit(WhileStmt*       stm) override;
+    void visit(BodyStmt*        stm) override;
+    void visit(AsignStmt*       stm) override;
+    void visit(PrintStmt*       stm) override;
+    void visit(ReturnStm*       stm) override;
+    void visit(DeleteStm*       stm) override;
+    void visit(ContinueStm*     stm) override;
+    void visit(BreakStmt*       stm) override;
+    void visit(SwitchStmt*      stm) override;
+    void visit(TryStmt*         stm) override;
+    void visit(DeferStmt*       stm) override;
+    void visit(ForStmt*         stm) override;
+    void visit(DerefAssignStmt* stm) override;
+ 
+
+    void visit(Fundec*    fd) override;
+    void visit(Structdec* sd) override;
+    void visit(VarDec*    vd) override;
+    void visit(ConstDec*  cd) override;
+    void visit(Template*  t)  override;
+ 
+   
+    void visit(IdType*       tipo) override;
+    void visit(PointerType*  tipo) override;
+    void visit(ArrayType*    tipo) override;
+    void visit(OptionalType* tipo) override;
+    void visit(ErrorType*    tipo) override;
+    void visit(UnionType*    tipo) override;
+    void visit(EnumType*     tipo) override;
+ 
+
+    void visit(Body*     b) override;
+    void visit(Programa* p) override;
+};
+ 
+//  SethiUlman
+class SethiUlman : public Visitor {
+public:
+    int  maxRegisters = 0;
+    bool verbose      = false;
+ 
+    Value visit(BinaryExp*                 exp) override;
+    Value visit(NumberExpDecimal*          exp) override;
+    Value visit(NumberExpFlotante*         exp) override;
+    Value visit(StringExp*                 exp) override;
+    Value visit(CharExp*                   exp) override;
+    Value visit(IdExp*                     exp) override;
+    Value visit(BoolExp*                   exp) override;
+    Value visit(NotExp*                    exp) override;
+    Value visit(FcallExp*                  exp) override;
+    Value visit(UnaryExp*                  exp) override;
+    Value visit(NewExp*                    exp) override;
+    Value visit(NullExp*                   exp) override;
+    Value visit(UndefinedExp*              exp) override;
+    Value visit(ReferenceExp*              exp) override;
+    Value visit(PunteroExp*                exp) override;
+    Value visit(AlgoconcorchetesylistaExp* exp) override;
+    Value visit(AlgoconcorchetesExp*       exp) override;
+    Value visit(PuntoExp*                  exp) override;
+    Value visit(LambdaExp*                 exp) override;
+ 
+    void visit(IfStmt*          stm) override;
+    void visit(WhileStmt*       stm) override;
+    void visit(BodyStmt*        stm) override;
+    void visit(AsignStmt*       stm) override;
+    void visit(PrintStmt*       stm) override;
+    void visit(ReturnStm*       stm) override;
+    void visit(DeleteStm*       stm) override;
+    void visit(ContinueStm*     stm) override;
+    void visit(BreakStmt*       stm) override;
+    void visit(SwitchStmt*      stm) override;
+    void visit(TryStmt*         stm) override;
+    void visit(DeferStmt*       stm) override;
+    void visit(ForStmt*         stm) override;
+    void visit(DerefAssignStmt* stm) override;
+ 
+    void visit(Fundec*    fd) override;
+    void visit(Structdec* sd) override;
+    void visit(VarDec*    vd) override;
+    void visit(ConstDec*  cd) override;
+    void visit(Template*  t)  override;
+ 
+
+    void visit(IdType*       tipo) override;
+    void visit(PointerType*  tipo) override;
+    void visit(ArrayType*    tipo) override;
+    void visit(OptionalType* tipo) override;
+    void visit(ErrorType*    tipo) override;
+    void visit(UnionType*    tipo) override;
+    void visit(EnumType*     tipo) override;
+ 
+    void visit(Body*     b) override;
+    void visit(Programa* p) override;
+};
+
+
+// ─── Cascada ────────────────────────────────────────────────────────────────
+// Pase sobre el AST: constant-folding inline, copy-propagation,
+// eliminación de código muerto y simplificaciones algebraicas.
+class Cascada : public Visitor {
+public:
+    // Entorno: nombre → valor constante conocido
+    std::unordered_map<std::string, CFValue> env;
+    // Variables "muertas" (asignadas pero nunca leídas en este scope)
+    std::unordered_set<std::string> used;
+
+    // Punto de entrada
+    void optimize(Programa* p);
+
+    // Helpers
+    CFValue fold(Exp* e);
+    // Devuelve true si la expresión es la constante entera k
+    bool isIntConst(Exp* e, long long k);
+
+    Value visit(BinaryExp*                 exp) override;
+    Value visit(NumberExpDecimal*          exp) override;
+    Value visit(NumberExpFlotante*         exp) override;
+    Value visit(StringExp*                 exp) override;
+    Value visit(CharExp*                   exp) override;
+    Value visit(IdExp*                     exp) override;
+    Value visit(BoolExp*                   exp) override;
+    Value visit(NotExp*                    exp) override;
+    Value visit(FcallExp*                  exp) override;
+    Value visit(UnaryExp*                  exp) override;
+    Value visit(NewExp*                    exp) override;
+    Value visit(NullExp*                   exp) override;
+    Value visit(UndefinedExp*              exp) override;
+    Value visit(ReferenceExp*              exp) override;
+    Value visit(PunteroExp*                exp) override;
+    Value visit(AlgoconcorchetesylistaExp* exp) override;
+    Value visit(AlgoconcorchetesExp*       exp) override;
+    Value visit(PuntoExp*                  exp) override;
+    Value visit(LambdaExp*                 exp) override;
+
+    void visit(IfStmt*          stm) override;
+    void visit(WhileStmt*       stm) override;
+    void visit(BodyStmt*        stm) override;
+    void visit(AsignStmt*       stm) override;
+    void visit(PrintStmt*       stm) override;
+    void visit(ReturnStm*       stm) override;
+    void visit(DeleteStm*       stm) override;
+    void visit(ContinueStm*     stm) override;
+    void visit(BreakStmt*       stm) override;
+    void visit(SwitchStmt*      stm) override;
+    void visit(TryStmt*         stm) override;
+    void visit(DeferStmt*       stm) override;
+    void visit(ForStmt*         stm) override;
+    void visit(DerefAssignStmt* stm) override;
+
+    void visit(Fundec*    fd) override;
+    void visit(Structdec* sd) override;
+    void visit(VarDec*    vd) override;
+    void visit(ConstDec*  cd) override;
+    void visit(Template*  t)  override;
+
+    void visit(IdType*       tipo) override;
+    void visit(PointerType*  tipo) override;
+    void visit(ArrayType*    tipo) override;
+    void visit(OptionalType* tipo) override;
+    void visit(ErrorType*    tipo) override;
+    void visit(UnionType*    tipo) override;
+    void visit(EnumType*     tipo) override;
+
+    void visit(Body*     b) override;
+    void visit(Programa* p) override;
+};
+
+// Peephole
+class Peephole : public Visitor {
+public:
+    std::vector<std::string> lines;
+    std::vector<std::string> optimize(const std::vector<std::string>& input);
+
+private:
+    bool ruleRedundantMov   (std::vector<std::string>& w, int i); // mov %rax,%rax
+    bool rulePushPop        (std::vector<std::string>& w, int i); // pushq/popq mismo reg
+    bool ruleMovThenMov     (std::vector<std::string>& w, int i); // mov A→B; mov A→B
+    bool ruleAddZero        (std::vector<std::string>& w, int i); // addq $0, %rax
+    bool ruleSubZero        (std::vector<std::string>& w, int i); // subq $0, %rax
+    bool ruleMulOne         (std::vector<std::string>& w, int i); // imulq $1, %rax
+    bool ruleJmpToNext      (std::vector<std::string>& w, int i); // jmp label; label:
+    bool ruleJmpToJmp       (std::vector<std::string>& w, int i); // jmp L1; L1: jmp L2
+    bool ruleXorThenMov     (std::vector<std::string>& w, int i); // xorq %rax,%rax; movq $k,%rax
+    bool ruleLeaveRet       (std::vector<std::string>& w, int i); // leave+ret duplicados
+    bool ruleMulPow2        (std::vector<std::string>& w, int i); // imulq $2^n → shlq
+    bool ruleDivPow2        (std::vector<std::string>& w, int i); // idivq $2^n → sarq
+
+    static std::string trim(const std::string& s);
+    static bool isLabel(const std::string& s);
+    static std::string getLabel(const std::string& s); // "jmp L1" → "L1"
+    static bool isPow2(long long n, int& shift);
+
+public:
+    Value visit(BinaryExp*                 exp) override;
+    Value visit(NumberExpDecimal*          exp) override;
+    Value visit(NumberExpFlotante*         exp) override;
+    Value visit(StringExp*                 exp) override;
+    Value visit(CharExp*                   exp) override;
+    Value visit(IdExp*                     exp) override;
+    Value visit(BoolExp*                   exp) override;
+    Value visit(NotExp*                    exp) override;
+    Value visit(FcallExp*                  exp) override;
+    Value visit(UnaryExp*                  exp) override;
+    Value visit(NewExp*                    exp) override;
+    Value visit(NullExp*                   exp) override;
+    Value visit(UndefinedExp*              exp) override;
+    Value visit(ReferenceExp*              exp) override;
+    Value visit(PunteroExp*                exp) override;
+    Value visit(AlgoconcorchetesylistaExp* exp) override;
+    Value visit(AlgoconcorchetesExp*       exp) override;
+    Value visit(PuntoExp*                  exp) override;
+    Value visit(LambdaExp*                 exp) override;
+
+    void visit(IfStmt*          stm) override;
+    void visit(WhileStmt*       stm) override;
+    void visit(BodyStmt*        stm) override;
+    void visit(AsignStmt*       stm) override;
+    void visit(PrintStmt*       stm) override;
+    void visit(ReturnStm*       stm) override;
+    void visit(DeleteStm*       stm) override;
+    void visit(ContinueStm*     stm) override;
+    void visit(BreakStmt*       stm) override;
+    void visit(SwitchStmt*      stm) override;
+    void visit(TryStmt*         stm) override;
+    void visit(DeferStmt*       stm) override;
+    void visit(ForStmt*         stm) override;
+    void visit(DerefAssignStmt* stm) override;
+
+    void visit(Fundec*    fd) override;
+    void visit(Structdec* sd) override;
+    void visit(VarDec*    vd) override;
+    void visit(ConstDec*  cd) override;
+    void visit(Template*  t)  override;
+
+    void visit(IdType*       tipo) override;
+    void visit(PointerType*  tipo) override;
+    void visit(ArrayType*    tipo) override;
+    void visit(OptionalType* tipo) override;
+    void visit(ErrorType*    tipo) override;
+    void visit(UnionType*    tipo) override;
+    void visit(EnumType*     tipo) override;
+
+    void visit(Body*     b) override;
+    void visit(Programa* p) override;
+};
+
 
 #endif // VISITOR_H

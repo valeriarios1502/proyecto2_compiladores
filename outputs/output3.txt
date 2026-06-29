@@ -36,11 +36,10 @@ sumar:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     leave
     ret
@@ -54,24 +53,22 @@ buscar:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -24(%rbp)
 while_start_1:
-    movq  -24(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
     cmpq  $0, %rax
     je    while_end_2
-    movq  -24(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -24(%rbp)
     jmp   while_start_1
@@ -96,7 +93,8 @@ main:
     popq  %r12
     movq  $4, %rax
     pushq %rax
-    movq  $3, %rdi
+    movq  $3, %rax
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -106,6 +104,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -117,7 +116,8 @@ main:
     popq  %r12
     movq  $20, %rax
     pushq %rax
-    movq  $10, %rdi
+    movq  $10, %rax
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -127,6 +127,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -16(%rbp)
+    movq  -16(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -138,7 +139,8 @@ main:
     popq  %r12
     movq  $200, %rax
     pushq %rax
-    movq  $100, %rdi
+    movq  $100, %rax
+    movq  %rax, %rdi
     popq  %rsi
     pushq %r12
     movq  %rsp, %r12
@@ -148,6 +150,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -24(%rbp)
+    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -170,8 +173,8 @@ main:
     pushq %rax
     movq  -32(%rbp), %rax
     pushq %rax
-    xorq  %rax, %rax
-    imulq $8, %rax
+    movq  $0, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -182,7 +185,7 @@ main:
     movq  -32(%rbp), %rax
     pushq %rax
     movq  $1, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -193,7 +196,7 @@ main:
     movq  -32(%rbp), %rax
     pushq %rax
     movq  $2, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -204,7 +207,7 @@ main:
     movq  -32(%rbp), %rax
     pushq %rax
     movq  $3, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -215,20 +218,19 @@ main:
     movq  -32(%rbp), %rax
     pushq %rax
     movq  $4, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -40(%rbp)
 while_start_3:
-    movq  -40(%rbp), %rax
-    pushq %rax
     movq  $5, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -40(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
@@ -248,11 +250,10 @@ while_start_3:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -40(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -40(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -40(%rbp)
     jmp   while_start_3

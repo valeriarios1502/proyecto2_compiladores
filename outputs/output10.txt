@@ -17,11 +17,10 @@ factorial:
     movq  %rsp, %rbp
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setle %al
     movzbq %al, %rax
@@ -32,13 +31,10 @@ factorial:
     ret
     jmp   endif_1
 else_0:
-    movq  -8(%rbp), %rax
-    pushq %rax
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     subq  %rcx, %rax
     movq  %rax, %rdi
     pushq %r12
@@ -48,8 +44,9 @@ else_0:
     call  factorial
     movq  %r12, %rsp
     popq  %r12
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     imulq %rcx, %rax
     leave
     ret
@@ -63,11 +60,10 @@ fibonacci:
     movq  %rsp, %rbp
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setle %al
     movzbq %al, %rax
@@ -78,26 +74,24 @@ fibonacci:
     ret
     jmp   endif_3
 else_2:
+    movq  $2, %rax
+    pushq %rax
     movq  -8(%rbp), %rax
+    popq  %rcx
+    subq  %rcx, %rax
+    movq  %rax, %rdi
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    xorq  %rax, %rax
+    call  fibonacci
+    movq  %r12, %rsp
+    popq  %r12
     pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    subq  %rcx, %rax
-    movq  %rax, %rdi
-    pushq %r12
-    movq  %rsp, %r12
-    andq  $-16, %rsp
-    xorq  %rax, %rax
-    call  fibonacci
-    movq  %r12, %rsp
-    popq  %r12
     pushq %rax
     movq  -8(%rbp), %rax
-    pushq %rax
-    movq  $2, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    popq  %rcx
     subq  %rcx, %rax
     movq  %rax, %rdi
     pushq %r12
@@ -107,8 +101,7 @@ else_2:
     call  fibonacci
     movq  %r12, %rsp
     popq  %r12
-    movq  %rax, %rcx
-    popq  %rax
+    popq  %rcx
     addq  %rcx, %rax
     leave
     ret
@@ -123,11 +116,10 @@ area:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     imulq %rcx, %rax
     leave
     ret
@@ -141,11 +133,10 @@ maximo:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setg  %al
     movzbq %al, %rax
@@ -170,11 +161,10 @@ minimo:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
@@ -198,11 +188,10 @@ abs:
     movq  %rsp, %rbp
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
-    movq  -8(%rbp), %rax
+    movq  $0, %rax
     pushq %rax
-    xorq  %rax, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
@@ -226,7 +215,8 @@ main:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $5, %rdi
+    movq  $5, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -235,6 +225,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -244,7 +235,8 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $10, %rdi
+    movq  $10, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -253,6 +245,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -16(%rbp)
+    movq  -16(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -262,7 +255,8 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $7, %rdi
+    movq  $7, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -271,6 +265,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -24(%rbp)
+    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -280,7 +275,8 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  $10, %rdi
+    movq  $10, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -289,6 +285,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -32(%rbp)
+    movq  -32(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -320,6 +317,7 @@ main:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
+    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
     pushq %r12
     movq  %rsp, %r12
@@ -330,6 +328,7 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
+    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %r12
     movq  %rsp, %r12
@@ -349,13 +348,13 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -48(%rbp)
-    xorq  %rax, %rax
+    movq  $0, %rax
     pushq %rax
     movq  -48(%rbp), %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    xorq  %rax, %rax
+    movq  $0, %rax
     pushq %rax
     movq  -48(%rbp), %rax
     addq  $8, %rax
@@ -376,8 +375,10 @@ main:
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
+    movq  -48(%rbp), %rax
     movq  24(%rax), %rax
     pushq %rax
+    movq  -48(%rbp), %rax
     movq  16(%rax), %rax
     movq  %rax, %rdi
     popq  %rsi
@@ -389,6 +390,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -56(%rbp)
+    movq  -56(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -398,8 +400,10 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
+    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %rax
+    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
     movq  %rax, %rdi
     popq  %rsi
@@ -411,6 +415,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -64(%rbp)
+    movq  -64(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -420,8 +425,10 @@ main:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
+    movq  -40(%rbp), %rax
     movq  8(%rax), %rax
     pushq %rax
+    movq  -40(%rbp), %rax
     movq  0(%rax), %rax
     movq  %rax, %rdi
     popq  %rsi
@@ -433,6 +440,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -72(%rbp)
+    movq  -72(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -453,6 +461,7 @@ main:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -80(%rbp)
+    movq  -80(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -475,8 +484,8 @@ main:
     pushq %rax
     movq  -88(%rbp), %rax
     pushq %rax
-    xorq  %rax, %rax
-    imulq $8, %rax
+    movq  $0, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -487,7 +496,7 @@ main:
     movq  -88(%rbp), %rax
     pushq %rax
     movq  $1, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -498,7 +507,7 @@ main:
     movq  -88(%rbp), %rax
     pushq %rax
     movq  $2, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -509,7 +518,7 @@ main:
     movq  -88(%rbp), %rax
     pushq %rax
     movq  $3, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -520,20 +529,19 @@ main:
     movq  -88(%rbp), %rax
     pushq %rax
     movq  $4, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -96(%rbp)
 while_start_10:
-    movq  -96(%rbp), %rax
-    pushq %rax
     movq  $5, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -96(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
@@ -647,11 +655,10 @@ switch_next_21:
     popq  %r12
     addq  $8, %rsp
 switch_end_12:
-    movq  -96(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -96(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -96(%rbp)
     jmp   while_start_10

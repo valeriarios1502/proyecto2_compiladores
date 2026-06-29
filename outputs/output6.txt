@@ -18,11 +18,10 @@ sumar:
     subq  $1024, %rsp
     movq  %rdi, -8(%rbp)
     movq  %rsi, -16(%rbp)
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  -16(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     leave
     ret
@@ -34,46 +33,26 @@ exprs:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $1, %rax
-    pushq %rax
     movq  $2, %rax
-    pushq %rax
-    movq  $3, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    imulq %rcx, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    addq  %rcx, %rax
     pushq %rax
     movq  $4, %rax
-    pushq %rax
-    movq  $2, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    popq  %rcx
     cqto
     idivq %rcx
-    movq  %rax, %rcx
-    popq  %rax
-    subq  %rcx, %rax
-    movq  %rax, -8(%rbp)
-    pushq %r12
-    movq  %rsp, %r12
-    andq  $-16, %rsp
-    movq  %rax, %rsi
-    leaq  print_int_fmt(%rip), %rdi
-    xorq  %rax, %rax
-    call  printf@PLT
-    movq  %r12, %rsp
-    popq  %r12
-    movq  $10, %rax
     pushq %rax
     movq  $3, %rax
-    movq  %rax, %rcx
-    popq  %rax
-    cqto
-    idivq %rcx
-    movq  %rdx, -16(%rbp)
+    pushq %rax
+    movq  $2, %rax
+    popq  %rcx
+    imulq %rcx, %rax
+    pushq %rax
+    movq  $1, %rax
+    popq  %rcx
+    addq  %rcx, %rax
+    popq  %rcx
+    subq  %rcx, %rax
+    movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -83,15 +62,33 @@ exprs:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -8(%rbp), %rax
+    movq  $3, %rax
     pushq %rax
+    movq  $10, %rax
+    popq  %rcx
+    cqto
+    idivq %rcx
+    movq  %rdx, %rax
+    movq  %rax, -16(%rbp)
+    movq  -16(%rbp), %rax
+    pushq %r12
+    movq  %rsp, %r12
+    andq  $-16, %rsp
+    movq  %rax, %rsi
+    leaq  print_int_fmt(%rip), %rdi
+    xorq  %rax, %rax
+    call  printf@PLT
+    movq  %r12, %rsp
+    popq  %r12
     movq  $6, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     sete  %al
     movzbq %al, %rax
     movq  %rax, -24(%rbp)
+    movq  -24(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -101,15 +98,15 @@ exprs:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $99, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setne %al
     movzbq %al, %rax
     movq  %rax, -32(%rbp)
+    movq  -32(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -119,15 +116,15 @@ exprs:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $5, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setg  %al
     movzbq %al, %rax
     movq  %rax, -40(%rbp)
+    movq  -40(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -137,15 +134,15 @@ exprs:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -8(%rbp), %rax
-    pushq %rax
     movq  $100, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
     movq  %rax, -48(%rbp)
+    movq  -48(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -158,6 +155,7 @@ exprs:
     movq  -8(%rbp), %rax
     negq  %rax
     movq  %rax, -56(%rbp)
+    movq  -56(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -169,8 +167,10 @@ exprs:
     popq  %r12
     leaq  -8(%rbp), %rax
     movq  %rax, -64(%rbp)
+    movq  -64(%rbp), %rax
     movq  (%rax), %rax
     movq  %rax, -72(%rbp)
+    movq  -72(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -209,8 +209,8 @@ exprs:
     pushq %rax
     movq  -80(%rbp), %rax
     pushq %rax
-    xorq  %rax, %rax
-    imulq $8, %rax
+    movq  $0, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -221,7 +221,7 @@ exprs:
     movq  -80(%rbp), %rax
     pushq %rax
     movq  $1, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -232,7 +232,7 @@ exprs:
     movq  -80(%rbp), %rax
     pushq %rax
     movq  $2, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -240,7 +240,7 @@ exprs:
     movq  %rdx, (%rcx)
     movq  -80(%rbp), %rax
     pushq %rax
-    xorq  %rax, %rax
+    movq  $0, %rax
     popq  %rcx
     movq  (%rcx,%rax,8), %rax
     pushq %r12
@@ -293,6 +293,7 @@ exprs:
     movq  %r12, %rsp
     popq  %r12
     movq  %rax, -88(%rbp)
+    movq  -88(%rbp), %rax
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp

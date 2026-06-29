@@ -16,12 +16,12 @@ control:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -8(%rbp)
+    movq  $0, %rax
     pushq %rax
-    xorq  %rax, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    movq  -8(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     sete  %al
     movzbq %al, %rax
@@ -63,8 +63,8 @@ endif_1:
     pushq %rax
     movq  -16(%rbp), %rax
     pushq %rax
-    xorq  %rax, %rax
-    imulq $8, %rax
+    movq  $0, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -75,7 +75,7 @@ endif_1:
     movq  -16(%rbp), %rax
     pushq %rax
     movq  $1, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -86,7 +86,7 @@ endif_1:
     movq  -16(%rbp), %rax
     pushq %rax
     movq  $2, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -97,7 +97,7 @@ endif_1:
     movq  -16(%rbp), %rax
     pushq %rax
     movq  $3, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
@@ -108,20 +108,19 @@ endif_1:
     movq  -16(%rbp), %rax
     pushq %rax
     movq  $4, %rax
-    imulq $8, %rax
+    shlq  $3, %rax
     popq  %rcx
     addq  %rcx, %rax
     movq  %rax, %rcx
     popq  %rdx
     movq  %rdx, (%rcx)
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -24(%rbp)
 while_start_4:
-    movq  -24(%rbp), %rax
-    pushq %rax
     movq  $5, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
@@ -141,41 +140,38 @@ while_start_4:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    movq  -24(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -24(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -24(%rbp)
     jmp   while_start_4
 while_end_5:
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -32(%rbp)
-    movq  $1, -40(%rbp)
+    movq  $1, %rax
+    movq  %rax, -40(%rbp)
 while_start_6:
-    movq  -40(%rbp), %rax
-    pushq %rax
     movq  $10, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -40(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setle %al
     movzbq %al, %rax
     cmpq  $0, %rax
     je    while_end_7
-    movq  -32(%rbp), %rax
-    pushq %rax
     movq  -40(%rbp), %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -32(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -32(%rbp)
-    movq  -40(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -40(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -40(%rbp)
     jmp   while_start_6
@@ -190,24 +186,22 @@ while_end_7:
     call  printf@PLT
     movq  %r12, %rsp
     popq  %r12
-    xorq  %rax, %rax
+    movq  $0, %rax
     movq  %rax, -48(%rbp)
 while_start_8:
-    movq  -48(%rbp), %rax
-    pushq %rax
     movq  $10, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -48(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     setl  %al
     movzbq %al, %rax
     cmpq  $0, %rax
     je    while_end_9
-    movq  -48(%rbp), %rax
-    pushq %rax
     movq  $5, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -48(%rbp), %rax
+    popq  %rcx
     cmpq  %rcx, %rax
     sete  %al
     movzbq %al, %rax
@@ -217,11 +211,10 @@ while_start_8:
     jmp   endif_11
 else_10:
 endif_11:
-    movq  -48(%rbp), %rax
-    pushq %rax
     movq  $1, %rax
-    movq  %rax, %rcx
-    popq  %rax
+    pushq %rax
+    movq  -48(%rbp), %rax
+    popq  %rcx
     addq  %rcx, %rax
     movq  %rax, -48(%rbp)
     jmp   while_start_8

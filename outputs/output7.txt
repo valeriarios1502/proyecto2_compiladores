@@ -206,7 +206,8 @@ main:
     pushq %rbp
     movq  %rsp, %rbp
     subq  $1024, %rsp
-    movq  $1, %rdi
+    movq  $1, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -214,7 +215,8 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $2, %rdi
+    movq  $2, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -222,7 +224,8 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $3, %rdi
+    movq  $3, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -230,7 +233,8 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $5, %rdi
+    movq  $5, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -238,7 +242,8 @@ main:
     call  clasifica
     movq  %r12, %rsp
     popq  %r12
-    movq  $1, %rdi
+    movq  $1, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -246,7 +251,8 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $3, %rdi
+    movq  $3, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -254,7 +260,8 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $5, %rdi
+    movq  $5, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -262,7 +269,8 @@ main:
     call  diasemana
     movq  %r12, %rsp
     popq  %r12
-    movq  $6, %rdi
+    movq  $6, %rax
+    movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
     andq  $-16, %rsp
@@ -272,6 +280,7 @@ main:
     popq  %r12
     movq  $2, %rax
     movq  %rax, -8(%rbp)
+    movq  -8(%rbp), %rax
     movq  %rax, %rdi
     pushq %r12
     movq  %rsp, %r12
