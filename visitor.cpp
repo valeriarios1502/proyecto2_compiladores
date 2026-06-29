@@ -5,6 +5,7 @@
 #include <cmath>
 #include "ast.h"
 #include "visitor.h"
+#include <cstdint>
 
 using namespace std;
 
@@ -175,11 +176,12 @@ void GenCodeVisitor::visit(Body* b) {
 // ── Declaraciones de variables ────────────────────────────
 
 void GenCodeVisitor::visit(VarDec* vd) {
+    if (currentFunction.empty()) return; // ← AGREGA ESTA LÍNEA
+    
     if (posicion.find(vd->nombre) == posicion.end())
         posicion[vd->nombre] = varContador++;
-
     if (vd->exp) {
-        vd->exp->accept(this);                          // resultado en %rax
+        vd->exp->accept(this);
         cout << "    movq  %rax, " << offset(vd->nombre) << endl;
     }
 }
@@ -467,6 +469,15 @@ Value GenCodeVisitor::visit(BoolExp* exp) {
 }
 
 Value GenCodeVisitor::visit(IdExp* exp) {
+    // Manejo de error.X — tratar como constante entera única
+    if (exp->value.substr(0, 6) == "error.") {
+        // Asignamos un entero único por nombre de error
+        if (errorCodes.find(exp->value) == errorCodes.end())
+            errorCodes[exp->value] = (int)errorCodes.size() + 1;
+        cout << "    movq  $" << errorCodes[exp->value] << ", %rax" << endl;
+        return Value();
+    }
+
     if (posicion.find(exp->value) == posicion.end()) {
         cerr << "[GenCode] Error: variable no declarada: '" << exp->value << "'" << endl;
         exit(1);
@@ -811,3 +822,4 @@ void GenCodeVisitor::visit(OptionalType*t) { }
 void GenCodeVisitor::visit(ErrorType*   t) { }
 void GenCodeVisitor::visit(UnionType*   t) { }
 void GenCodeVisitor::visit(EnumType*    t) { }
+void GenCodeVisitor::visit(DerefAssignStmt*    t) { }

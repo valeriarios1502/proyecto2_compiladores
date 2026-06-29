@@ -115,6 +115,7 @@ Token* Scanner::nextToken() {
         if (lexema=="union") return new Token(Token::UNION, input, first, current - first);
         if (lexema=="error") return new Token(Token::ERROR, input, first, current - first);
         if (lexema=="orelse") return new Token(Token::OR, input, first, current - first);
+        if (lexema=="free") return new Token(Token::FREE, input, first, current - first);
         return new Token(Token::ID, input, first, current - first);
     }
 
@@ -186,7 +187,14 @@ Token* Scanner::nextToken() {
         case '-': token = new Token(Token::MINUS, c); break;
         case '*': token = new Token(Token::STAR, c); break;
         case '/': token = new Token(Token::DIV, c); break;
-        case '|': token = new Token(Token::PIPE, c); break;
+        case '|':
+            if (current + 1 < input.length() && input[current + 1] == '|') {
+                current++;
+                token = new Token(Token::OR, input, first, current + 1 - first);
+            } else {
+                token = new Token(Token::PIPE, c);
+            }
+            break;
         case '(': token = new Token(Token::LPAREN, c); break;
         case ')': token = new Token(Token::RPAREN, c); break;
         case '[': token = new Token(Token::LCORCHETE, c); break;

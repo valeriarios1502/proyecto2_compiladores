@@ -1,0 +1,44 @@
+Scanner
+
+TOKEN(COMPTIME, "comptime")
+TOKEN(LBRACE, "{")
+TOKEN(VAR, "var")
+
+TOKEN(ASSIGN, "=")
+TOKEN(NUMDECIMAL, "10")
+TOKEN(STAR, "*")
+TOKEN(NUMDECIMAL, "10")
+TOKEN(SEMICOL, ";")
+
+TOKEN(LPAREN, "(")
+
+TOKEN(RPAREN, ")")
+TOKEN(SEMICOL, ";")
+TOKEN(RBRACE, "}")
+TOKEN(PUB, "pub")
+TOKEN(FN, "fn")
+
+TOKEN(LPAREN, "(")
+TOKEN(COMPTIME, "comptime")
+
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(RPAREN, ")")
+
+TOKEN(LBRACE, "{")
+TOKEN(VAR, "var")
+
+TOKEN(ASSIGN, "=")
+TOKEN(COMPTIME, "comptime")
+
+TOKEN(STAR, "*")
+TOKEN(NUMDECIMAL, "2")
+TOKEN(SEMICOL, ";")
+TOKEN(RETURN, "return")
+
+TOKEN(SEMICOL, ";")
+TOKEN(RBRACE, "}")
+TOKEN(END)
+
+Scanner exitoso
+

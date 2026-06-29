@@ -71,6 +71,7 @@ public:
         NUMHEX,
         NUMBIN,
         ID,      // IDENT
+        FREE,
 
         COMILLASDOBLES,
         COMILLASSIMPLES,

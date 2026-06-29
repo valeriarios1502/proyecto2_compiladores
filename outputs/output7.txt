@@ -1,0 +1,127 @@
+=== STDOUT ===
+Parseo exitoso
+.section .data
+print_i32_fmt:  .string "%d\n"
+print_i64_fmt:  .string "%ld\n"
+print_u64_fmt:  .string "%lu\n"
+print_f32_fmt:  .string "%f\n"
+print_f64_fmt:  .string "%g\n"
+print_str_fmt:  .string "%s\n"
+
+.section .text
+.globl main
+
+exprs:
+    pushq %rbp
+    movq  %rsp, %rbp
+    subq  $256, %rsp
+    movq  $1, %rax
+    pushq %rax
+    movq  $2, %rax
+    pushq %rax
+    movq  $3, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    imulq %rcx, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    addq  %rcx, %rax
+    pushq %rax
+    movq  $4, %rax
+    pushq %rax
+    movq  $2, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cqto
+    idivq %rcx
+    pushq %rax
+    movq  $3, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cqto
+    idivq %rcx
+    movq  %rdx, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    subq  %rcx, %rax
+    movq  %rax, -8(%rbp)
+    movq  $1, %rax
+    testq %rax, %rax
+    sete  %al
+    movzbq %al, %rax
+    pushq %rax
+    movq  $0, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    testq %rax, %rax
+    setne %r10b
+    testq %rcx, %rcx
+    setne %r11b
+    andb  %r11b, %r10b
+    movzbq %r10b, %rax
+    pushq %rax
+    movq  $1, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    orq   %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    movq  %rax, -16(%rbp)
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  $1, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    sete  %al
+    movzbq %al, %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  $2, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    orq   %rcx, %rax
+    setne %al
+    movzbq %al, %rax
+    pushq %rax
+    movq  -8(%rbp), %rax
+    pushq %rax
+    movq  $5, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    cmpq  %rcx, %rax
+    setl  %al
+    movzbq %al, %rax
+    movq  %rax, %rcx
+    popq  %rax
+    testq %rax, %rax
+    setne %r10b
+    testq %rcx, %rcx
+    setne %r11b
+    andb  %r11b, %r10b
+    movzbq %r10b, %rax
+    movq  %rax, -24(%rbp)
+    movq  -8(%rbp), %rax
+    negq  %rax
+    movq  %rax, -32(%rbp)
+    movq  -8(%rbp), %rax
+    leaq  -8(%rbp), %rax
+    movq  %rax, -40(%rbp)
+    movq  -40(%rbp), %rax
+    movq  (%rax), %rax
+    movq  %rax, -48(%rbp)
+    movq  $8, %rdi
+    andq  $-16, %rsp
+    call  malloc@PLT
+    movq  %rax, -56(%rbp)
+    movq  -56(%rbp), %rax
+    movq  %rax, -64(%rbp)
+
+=== STDERR ===
+[GenCode] Error: variable no declarada: 'arr'

@@ -1,0 +1,88 @@
+Scanner
+
+TOKEN(FN, "fn")
+
+TOKEN(MENOR, "<")
+TOKEN(TYPE, "type")
+TOKEN(MENOR, "<")
+
+TOKEN(MAYOR, ">")
+TOKEN(MAYOR, ">")
+TOKEN(LPAREN, "(")
+
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(COMA, ",")
+
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(RPAREN, ")")
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(LBRACE, "{")
+TOKEN(IF, "if")
+TOKEN(LPAREN, "(")
+
+TOKEN(MAYOR, ">")
+
+TOKEN(RPAREN, ")")
+TOKEN(THEN, "then")
+TOKEN(LBRACE, "{")
+TOKEN(RETURN, "return")
+
+TOKEN(SEMICOL, ";")
+TOKEN(RBRACE, "}")
+TOKEN(ELSE, "else")
+TOKEN(THEN, "then")
+TOKEN(LBRACE, "{")
+TOKEN(RETURN, "return")
+
+TOKEN(SEMICOL, ";")
+TOKEN(RBRACE, "}")
+TOKEN(RBRACE, "}")
+TOKEN(FN, "fn")
+
+TOKEN(MENOR, "<")
+TOKEN(TYPE, "type")
+TOKEN(MENOR, "<")
+
+TOKEN(MAYOR, ">")
+TOKEN(MAYOR, ">")
+TOKEN(LPAREN, "(")
+
+TOKEN(DOSPUNTOS, ":")
+TOKEN(STAR, "*")
+
+TOKEN(COMA, ",")
+
+TOKEN(DOSPUNTOS, ":")
+TOKEN(STAR, "*")
+
+TOKEN(RPAREN, ")")
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(LBRACE, "{")
+TOKEN(VAR, "var")
+
+TOKEN(DOSPUNTOS, ":")
+
+TOKEN(ASSIGN, "=")
+TOKEN(STAR, "*")
+
+TOKEN(SEMICOL, ";")
+TOKEN(STAR, "*")
+
+TOKEN(ASSIGN, "=")
+TOKEN(STAR, "*")
+
+TOKEN(SEMICOL, ";")
+TOKEN(STAR, "*")
+
+TOKEN(ASSIGN, "=")
+
+TOKEN(SEMICOL, ";")
+TOKEN(RBRACE, "}")
+TOKEN(END)
+
+Scanner exitoso
+

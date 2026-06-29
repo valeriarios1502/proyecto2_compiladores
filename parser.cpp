@@ -83,16 +83,10 @@ Programa* Parser::parseP() {
         } else if (check(Token::PUB)) {
             p->declist.push_back(parsefn_dec());
         } else if (check(Token::FN)) {
-            // Distinguir template vs fn sin pub:
-            // template: fn <id> < <id> > ...
-            // fn sin pub también puede ser fn <id> ( ...
-            // Usamos lookahead: después de fn id, si viene MENOR → template
             p->declist.push_back(parseFnOrTemplate());
         } else if (check(Token::COMPTIME)) {
-            // comptime block a nivel top-level
             match(Token::COMPTIME);
             Body* b = parseBody();
-            // Lo guardamos como un BodyStmt dentro de una Fundec "comptime"
             Fundec* f = new Fundec();
             f->nombre = "__comptime__";
             f->tipo = new IdType("void");
@@ -106,7 +100,7 @@ Programa* Parser::parseP() {
 }
 
 // =============================
-// Decide fn normal vs template
+// <template-fn> ::= fn <ident> < type < <ident> > > ( <param-list>? ) : <type> <block>
 // =============================
 
 Top_dec* Parser::parseFnOrTemplate() {
@@ -115,41 +109,32 @@ Top_dec* Parser::parseFnOrTemplate() {
     expect(Token::FN, "Se esperaba 'fn'");
     expect(Token::ID, "Se esperaba identificador después de 'fn'");
     string nombre = previous->text;
+    expect(Token::MENOR, "Se esperaba '<' en template");
+    expect(Token::TYPE,  "Se esperaba 'type' en template");
+    expect(Token::MENOR, "Se esperaba '<' en template");
+    expect(Token::ID,    "Se esperaba identificador de tipo en template");
+    string tipo_param = previous->text;
+    expect(Token::MAYOR, "Se esperaba '>' en template");
+    expect(Token::MAYOR, "Se esperaba '>' en template");
 
-    if (check(Token::MENOR)) {
-        // Es template: fn <id> < <id> > ( <param-list> ) : <type> <block>
-        match(Token::MENOR);
-        expect(Token::ID, "Se esperaba parámetro de tipo en template");
-        string tipo_param = previous->text;
-        expect(Token::MAYOR, "Se esperaba '>' en template");
+    Template* t = new Template();
+    t->id1 = nombre;
+    t->id2 = tipo_param;
 
-        Template* t = new Template();
-        t->id1 = nombre;
-        t->id2 = tipo_param;
+    expect(Token::LPAREN, "Se esperaba '(' en template");
+    parseParamList(t->id_parametros, t->tipo_parametros);
+    expect(Token::RPAREN, "Se esperaba ')' en template");
+    expect(Token::DOSPUNTOS, "Se esperaba ':' en template");
+    t->tipo = parseType();
+    t->block = parseBody();
 
-        expect(Token::LPAREN, "Se esperaba '(' en template");
-        parseParamList(t->id_parametros, t->tipo_parametros);
-        expect(Token::RPAREN, "Se esperaba ')' en template");
-        expect(Token::DOSPUNTOS, "Se esperaba ':' en template");
-        t->tipo = parseType();
-        t->block = parseBody();
-        return t;
-    } else {
-        // fn sin pub (función interna sin pub)
-        Fundec* f = new Fundec();
-        f->nombre = nombre;
-
-        expect(Token::LPAREN, "Se esperaba '(' en fn");
-        parseParamList(f->id_parametros, f->tipo_parametros);
-        expect(Token::RPAREN, "Se esperaba ')'");
-        f->tipo = parseType();
-        f->cuerpo = parseBody();
-        return f;
-    }
+    return t;
+    
+        
 }
 
 // =============================
-// <var-decl>
+// <var-decl>   ::= var <ident> [ : <type> ] = <expr> ;
 // =============================
 
 Top_dec* Parser::parseVar_dec() {
@@ -162,12 +147,12 @@ Top_dec* Parser::parseVar_dec() {
         var->tienetipo = true;
         var->tipo = parseType();
         expect(Token::ASSIGN, "Se esperaba '=' en var");
-        var->exp = parseLogicExp();
+        var->exp = parseExpr();       
         match(Token::SEMICOL);
     } else if (match(Token::ASSIGN)) {
         var->tienetipo = false;
         var->tipo = nullptr;
-        var->exp = parseLogicExp();
+        var->exp = parseExpr();      
         match(Token::SEMICOL);
     } else {
         throw runtime_error("Error sintáctico en var: se esperaba ':' o '='");
@@ -176,7 +161,7 @@ Top_dec* Parser::parseVar_dec() {
 }
 
 // =============================
-// <const-decl>
+// <const-decl> ::= const <ident> [ : <type> ] = <expr> ;
 // =============================
 
 Top_dec* Parser::parseConts_dec() {
@@ -189,19 +174,22 @@ Top_dec* Parser::parseConts_dec() {
         c->tienetipo = true;
         c->tipo = parseType();
         expect(Token::ASSIGN, "Se esperaba '=' en const");
-        c->exp = parseLogicExp();
-    } else if (match(Token::ASSIGN)) {
+        c->exp = parseExpr();
+        match(Token::SEMICOL);
+    } 
+    else if (match(Token::ASSIGN)) {
         c->tienetipo = false;
-        c->tipo = nullptr;
-        c->exp = parseLogicExp();
-    } else {
+        c->exp = parseExpr();
+        match(Token::SEMICOL);
+    } 
+    else {
         throw runtime_error("Error sintáctico en const: se esperaba ':' o '='");
     }
     return c;
 }
 
 // =============================
-// <struct-decl> ::= struct <id> { (<id>:<type>;)* }
+// <struct-decl> ::= struct <ident> { ( <ident> : <type> ; )* }
 // =============================
 
 Top_dec* Parser::parseStruct_dec() {
@@ -223,21 +211,23 @@ Top_dec* Parser::parseStruct_dec() {
 }
 
 // =============================
-// <union-decl> ::= union(<id>) <id> { (<id>:<type>;)* }
+// <union-decl> ::= union <ident> [ ( <ident> ) ] { ( <ident> : <type> ; )* }
 // =============================
 
 Top_dec* Parser::parseUnion_dec() {
     match(Token::UNION);
-    expect(Token::LPAREN, "Se esperaba '(' en union");
-    expect(Token::ID, "Se esperaba tag enum en union");
-    string tag = previous->text;
-    expect(Token::RPAREN, "Se esperaba ')' en union");
 
+    // CORREGIDO: nombre va primero, luego el tag opcional
     expect(Token::ID, "Se esperaba nombre de union");
     string nombre = previous->text;
 
-    // Reutilizamos Structdec para la union (AST no tiene UnionDec específico a nivel top)
-    // Usamos VarDec con tipo UnionType
+    string tag = "";
+    if (match(Token::LPAREN)) {
+        expect(Token::ID, "Se esperaba tag enum en union");
+        tag = previous->text;
+        expect(Token::RPAREN, "Se esperaba ')' en union");
+    }
+
     UnionType* ut = new UnionType(nombre);
 
     expect(Token::LBRACE, "Se esperaba '{' en union");
@@ -252,7 +242,6 @@ Top_dec* Parser::parseUnion_dec() {
     }
     expect(Token::RBRACE, "Se esperaba '}' al cerrar union");
 
-    // Lo envolvemos en una VarDec cuyo tipo es el UnionType
     VarDec* vd = new VarDec();
     vd->nombre = nombre;
     vd->tipo = ut;
@@ -262,7 +251,7 @@ Top_dec* Parser::parseUnion_dec() {
 }
 
 // =============================
-// <fn-decl> ::= pub fn <id> ([<param-list>]) <type> { <block> }
+// <fn-decl>  ::= pub fn <ident> ( <param-list>? ) <type> { <body> }
 // =============================
 
 Top_dec* Parser::parsefn_dec() {
@@ -281,12 +270,12 @@ Top_dec* Parser::parsefn_dec() {
 }
 
 // =============================
-// Helper: parsea lista de parámetros en vectores
+// <param-list> ::= <param> { , <param> }*
+// <param>      ::= [comptime] <ident> : <type>
 // =============================
 
 void Parser::parseParamList(vector<string>& ids, vector<Type*>& tipos) {
     if (check(Token::ID) || check(Token::COMPTIME)) {
-        // comptime param
         bool es_comptime = match(Token::COMPTIME);
         expect(Token::ID, "Se esperaba identificador de parámetro");
         ids.push_back(previous->text);
@@ -305,8 +294,6 @@ void Parser::parseParamList(vector<string>& ids, vector<Type*>& tipos) {
 
 // =============================
 // <block> ::= { <stmt>* }
-// Nota: la gramática original usaba [ ] para bloques,
-// pero el AST y el switch sugieren { }. Se usa LBRACE/RBRACE.
 // =============================
 
 Body* Parser::parseBody() {
@@ -325,7 +312,6 @@ Body* Parser::parseBody() {
 
 Stmt* Parser::parseStmt() {
 
-    // --- var local ---
     if (check(Token::VAR)) {
         VarDec* vd = (VarDec*)parseVar_dec();
         match(Token::SEMICOL);
@@ -349,23 +335,67 @@ Stmt* Parser::parseStmt() {
         return a;
     }
 
-    // --- if ---
+    if (match(Token::RETURN)) {
+        if (check(Token::SEMICOL) || check(Token::RBRACE)) {
+            match(Token::SEMICOL);
+            return new ReturnStm();
+        }
+        Exp* exp = parseExpr();
+        match(Token::SEMICOL);
+        return new ReturnStm(exp);
+    }
+
+    if (match(Token::PRINT)) {
+        expect(Token::LPAREN, "Se esperaba '(' en print");
+        Exp* exp = parseLogicExp();
+        expect(Token::RPAREN, "Se esperaba ')' en print");
+        match(Token::SEMICOL);
+        return new PrintStmt(exp);
+    }
+
+    if (match(Token::FREE)) {
+        Exp* exp = parseLogicExp();
+        match(Token::SEMICOL);
+        return new DeleteStm(exp);
+    }
+
+    if (match(Token::DEFER)) {
+        Stmt* s = parseStmt();
+        return new DeferStmt(s);
+    }
+
+    if (match(Token::BREAK)) {
+        if (match(Token::DOSPUNTOS)) {          // ← break : label expr ;
+            match(Token::ID);
+            Exp* val = parseExpr();
+            match(Token::SEMICOL);
+            return new BreakStmt(val);
+        }                                        // ← llave que faltaba
+        if (check(Token::SEMICOL) || check(Token::RBRACE)) {
+            match(Token::SEMICOL);
+            return new BreakStmt();
+        }
+    }
+
+    if (match(Token::CONTINUE)) {
+        match(Token::SEMICOL);
+        return new ContinueStm();
+    }
+
     if (match(Token::IF)) {
         expect(Token::LPAREN, "Se esperaba '(' en if");
         Exp* condicion = parseLogicExp();
         expect(Token::RPAREN, "Se esperaba ')' en if");
         expect(Token::THEN, "Se esperaba 'then' en if");
         Body* if_cuerpo = parseBody();
-
         if (match(Token::ELSE)) {
-            match(Token::THEN); // 'else then' según la gramática
+            match(Token::THEN);
             Body* else_cuerpo = parseBody();
             return new IfStmt(condicion, if_cuerpo, else_cuerpo, true);
         }
         return new IfStmt(condicion, if_cuerpo, nullptr, false);
     }
 
-    // --- while ---
     if (match(Token::WHILE)) {
         expect(Token::LPAREN, "Se esperaba '(' en while");
         Exp* condicion = parseLogicExp();
@@ -378,96 +408,40 @@ Stmt* Parser::parseStmt() {
         return new WhileStmt(condicion, cuerpo);
     }
 
-    // --- for ---
     if (match(Token::FOR)) {
         expect(Token::LPAREN, "Se esperaba '(' en for");
-        Stmt* asignacion = parseStmt(); // assign-stmt (incluye ';')
-        Exp* condicion = parseLogicExp();
-        expect(Token::SEMICOL, "Se esperaba ';' en for");
-        Stmt* incremento = parseStmt(); // assign-stmt (incluye ';')
+        Exp* iterable = parseLogicExp();
         expect(Token::RPAREN, "Se esperaba ')' en for");
+        expect(Token::PIPE, "Se esperaba '|' en for");
+        expect(Token::ID, "Se esperaba identificador en for");
+        string var1 = previous->text;
+        string var2 = "";
+        if (match(Token::COMA)) {
+            expect(Token::ID, "Se esperaba segundo identificador en for");
+            var2 = previous->text;
+        }
+        expect(Token::PIPE, "Se esperaba '|' de cierre en for");
         Body* cuerpo = parseBody();
-        return new ForStmt(asignacion, condicion, incremento, cuerpo);
+        return new ForStmt(
+            new AsignStmt(var1, iterable),
+            new NullExp(),
+            new AsignStmt(var2.empty() ? "__idx__" : var2, new NullExp()),
+            cuerpo
+        );
     }
 
-    // --- return ---
-    if (match(Token::RETURN)) {
-        if (!check(Token::SEMICOL))
-        {
-            Exp* exp = parseLogicExp();
-            match(Token::SEMICOL);
-            return new ReturnStm(exp);
-        }
-        match(Token::SEMICOL);
-        return new ReturnStm();
-    }
-
-    // --- print ---
-    if (match(Token::PRINT)) {
-        expect(Token::LPAREN, "Se esperaba '(' en print");
-        Exp* exp = parseLogicExp();
-        expect(Token::RPAREN, "Se esperaba ')' en print");
-        expect(Token::SEMICOL, "Se esperaba ';' después de print");
-        return new PrintStmt(exp);
-    }
-
-    // --- delete ---
-    if (match(Token::DELETE)) {
-        Exp* exp = parseLogicExp();
-        expect(Token::SEMICOL, "Se esperaba ';' después de delete");
-        return new DeleteStm(exp);
-    }
-
-    // --- break ---
-    if (match(Token::BREAK)) {
-        // break : <ident> <expr> ;  (break con valor, extensión Zig)
-        if (match(Token::DOSPUNTOS))
-        {
-            expect(Token::ID, "Se esperaba label en break");
-            // Ignoramos el label por ahora, parseamos el valor
-            Exp* valor = parseLogicExp();
-            match(Token::SEMICOL);
-            return new BreakStmt(valor);
-        }
-        match(Token::SEMICOL);
-        return new BreakStmt();
-    }
-
-    // --- continue ---
-    if (match(Token::CONTINUE)) {
-        match(Token::SEMICOL);
-        return new ContinueStm();
-    }
-
-    // --- defer ---
-    if (match(Token::DEFER)) {
-        Stmt* inner = parseStmt();
-        return new DeferStmt(inner);
-    }
-
-    // --- comptime block ---
-    if (match(Token::COMPTIME)) {
-        Body* b = parseBody();
-        return new BodyStmt(b);
-    }
-
-    // --- switch ---
     if (match(Token::SWITCH)) {
         expect(Token::LPAREN, "Se esperaba '(' en switch");
         Exp* condicion = parseLogicExp();
         expect(Token::RPAREN, "Se esperaba ')' en switch");
         expect(Token::LBRACE, "Se esperaba '{' en switch");
-
         SwitchStmt* sw = new SwitchStmt(condicion);
         while (!check(Token::RBRACE) && !isAtEnd()) {
             if (match(Token::ELSE)) {
-                // else => { <block> }
-                // '=>' se escanea como ASSIGN ('=') + MAYOR ('>')  por separado
                 expect(Token::ASSIGN, "Se esperaba '=' de '=>' en case else");
                 expect(Token::MAYOR, "Se esperaba '>' de '=>' en case else");
                 sw->default_caso = parseBody();
             } else {
-                // <switch-pattern> => <block> ,
                 Exp* patron = parseLogicExp();
                 expect(Token::ASSIGN, "Se esperaba '=' de '=>' en case");
                 expect(Token::MAYOR, "Se esperaba '>' de '=>' en case");
@@ -480,97 +454,65 @@ Stmt* Parser::parseStmt() {
         return sw;
     }
 
-    // --- try / catch ---
-    // Sintaxis: try <expr> catch |<ident>| { <block> }
-    // No hay ';' entre expr y catch; ';' solo si no hay catch.
-    if (match(Token::TRY)) {
-        Exp* expr = parseLogicExp(); // incluye llamadas f(a,b) via parsePostfix
-
-        Body* try_body = nullptr;
-        Body* catch_body = nullptr;
-        string error_var;
-
-        if (match(Token::CATCH)) {
-            // catch |<ident>| { <block> }
-            // El scanner no tiene token para '|' solo; usa REFERENCIA para '&'.
-            // En la práctica el input tiene |err| donde '|' produce Token::ERR
-            // si no está mapeado. Intentamos consumir el id directamente:
-            if (match(Token::PIPE)) {
-                // '|' escaneado como PIPE (ver parche en scanner + token.h)
-                if (check(Token::ID))
-                {
-                    match(Token::ID);
-                    error_var = previous->text;
-                }
-                match(Token::PIPE); // cierre '|'
-            } else if (check(Token::ID)) {
-                // fallback: catch sin delimitadores
-                match(Token::ID);
-                error_var = previous->text;
-            }
-            catch_body = parseBody();
-        } else {
-            match(Token::SEMICOL); // try sin catch termina en ';'
-        }
-        return new TryStmt(expr, try_body, catch_body, error_var);
-    }
-
-    // --- bloque anidado ---
-    if (check(Token::LBRACE)) {
-        Body* cuerpo = parseBody();
-        return new BodyStmt(cuerpo);
-    }
-
-    // --- labeled block: <ident> : { ... } ---
-    // Necesitamos distinguir  "ident :" (label) de "ident = " (assign)
-    // Si el token es ID y el siguiente es DOSPUNTOS → labeled block
     if (check(Token::ID)) {
-        // Miramos sin consumir: guardamos estado
-        Token* saved_current = current;
-        // Consumimos el ID temporalmente
-        advance(); // ID consumido
+        advance();
         string nombre = previous->text;
 
-        if (match(Token::DOSPUNTOS)) {
-            // Puede ser labeled block o variable local con tipo
-            if (check(Token::LBRACE)) {
-                // Es labeled block
-                Body* b = parseBody();
-                return new BodyStmt(b);
+        // Construimos el lvalue como expresión postfix
+        Exp* lval = new IdExp(nombre);
+
+        // Seguimos consumiendo .campo, [idx], etc.
+        while (true) {
+            if (match(Token::PUNTO)) {
+                if (match(Token::QUESTION)) {
+                    lval = new PuntoExp(lval, "__unwrap__");
+                } else {
+                    expect(Token::ID, "Se esperaba identificador después de '.'");
+                    lval = new PuntoExp(lval, previous->text);
+                }
+            } else if (match(Token::LCORCHETE)) {
+                Exp* idx = parseLogicExp();
+                expect(Token::RCORCHETE, "Se esperaba ']' en lvalue");
+                lval = new AlgoconcorchetesExp(lval, idx);
+            } else {
+                break;
             }
-            // Si no, es declaración con tipo — no debería llegar aquí en stmt
-            // pero lo manejamos como error
-            throw runtime_error("Error sintáctico: ':' inesperado en stmt");
         }
 
-        // Si no es ':', debe ser '=' → assign-stmt
-        if (match(Token::ASSIGN)) {
-            Exp* exp = parseLogicExp();
-            match(Token::SEMICOL);
-            return new AsignStmt(nombre, exp);
+        // Ahora sí esperamos el =
+        expect(Token::ASSIGN, "Se esperaba '=' en asignación");
+        Exp* rval = parseExpr();
+        match(Token::SEMICOL);
+
+        // Si el lvalue es un IdExp simple, usamos AsignStmt normal
+        if (IdExp* id = dynamic_cast<IdExp*>(lval)) {
+            delete lval;
+            return new AsignStmt(nombre, rval);
         }
 
-        // Llamada a función como stmt: ident(...);
-        if (match(Token::LPAREN)) {
-            FcallExp* call = new FcallExp();
-            call->nombre = nombre;
-            if (!check(Token::RPAREN)) {
-                call->argumentos.push_back(parseLogicExp());
-                while (match(Token::COMA))
-                    call->argumentos.push_back(parseLogicExp());
-            }
-            expect(Token::RPAREN, "Se esperaba ')' en llamada a función");
-            match(Token::SEMICOL);
-            // Envolvemos la llamada en AsignStmt con variable temporal "__call__"
-            // ya que el AST no tiene ExprStmt. El visitor puede ignorar el nombre.
-            return new AsignStmt("__call__", call);
-        }
-
-        // Si llegamos aquí, el token después del ID no es ':', '=' ni '('
-        throw runtime_error("Error sintáctico: se esperaba '=', '(' o '.' después de '" + nombre + "'");
+        // Si es campo o índice, usamos DerefAssignStmt (o el nodo que tengas)
+        return new DerefAssignStmt(lval, rval);
     }
 
-    throw runtime_error("Error sintáctico: sentencia inesperada");
+    // Al inicio de parseStmt(), antes de los demás checks:
+    if (match(Token::STAR)) {
+        // *expr = expr ;
+        Exp* lval = parsePostfix();          // desreferencia: *a
+        expect(Token::ASSIGN, "Se esperaba '=' después de expresión desreferenciada");
+        Exp* rval = parseExpr();
+        match(Token::SEMICOL);
+        // Reusar AsignStmt con nombre especial, o crear DerefAssignStmt
+        // Workaround con lo que ya tienes:
+        FcallExp* f = new FcallExp();
+        f->nombre = "__deref_assign__";
+        f->argumentos.push_back(lval);
+        f->argumentos.push_back(rval);
+        return new ReturnStm(f);  // placeholder, ajusta según tu AST
+    }
+
+    throw runtime_error("Error sintáctico: sentencia inesperada - token: '" 
+    + current->text + "' tipo: " + to_string(current->type) 
+    + " | previous: '" + (previous ? previous->text : "null") + "'");
 }
 
 // =============================
@@ -582,6 +524,10 @@ Type* Parser::parseType() {
     if (match(Token::QUESTION)) {
         Type* inner = parseType();
         return new OptionalType(inner);
+    }
+
+    if (match(Token::TYPE)) {
+        return new IdType("type");
     }
 
     // ! <type>  →  error union sin nombre
@@ -596,14 +542,6 @@ Type* Parser::parseType() {
         return new PointerType(inner);
     }
 
-    // [ <expr> ] <type>  o  [ <expr> ][ <expr> ] <type>
-    if (match(Token::LBRACE)) {
-        // Realmente el array usa corchetes [ ], pero LBRACE es {
-        // La gramática usa [expr] para arrays → LCORCHETE
-        // (ver scanner: LCORCHETE = '[')
-        // Este caso no debería dispararse aquí; lo manejamos abajo
-    }
-
     if (match(Token::LCORCHETE)) {
         Exp* exp1 = parseLogicExp();
         expect(Token::RCORCHETE, "Se esperaba ']' en tipo array");
@@ -615,22 +553,6 @@ Type* Parser::parseType() {
         }
         Type* inner = parseType();
         return new ArrayType(exp1, nullptr, inner, false);
-    }
-
-    // error { <ident>, ... }  →  error set
-    if (match(Token::ERROR)) {
-        if (match(Token::LBRACE)) {
-            // error set como tipo anónimo; lo representamos con ErrorType sobre IdType vacío
-            // Consumimos los identificadores
-            while (!check(Token::RBRACE) && !isAtEnd()) {
-                match(Token::ID);
-                match(Token::COMA);
-            }
-            expect(Token::RBRACE, "Se esperaba '}' en error set");
-            return new ErrorType(new IdType("error"));
-        }
-        // error sin llaves: solo la palabra clave como tipo base
-        return new IdType("error");
     }
 
     // <ident> [ ! <type> ]  →  MyError!T
@@ -655,17 +577,35 @@ Type* Parser::parseType() {
 Exp* Parser::parseExpr() {
     if (match(Token::TRY)) {
         Exp* e = parseLogicExp();
-        // TryExp no existe en el AST; lo envolvemos en un UnaryExp custom
-        // Usamos FcallExp con nombre "__try__" como workaround
         FcallExp* f = new FcallExp();
         f->nombre = "__try__";
         f->argumentos.push_back(e);
         return f;
     }
     if (match(Token::COMPTIME)) {
-        return parseLogicExp(); // comptime expr se evalúa igual
+        return parseLogicExp();
     }
-    return parseLogicExp();
+
+    Exp* e = parseLogicExp();
+
+    if (match(Token::CATCH)) {
+        string error_var = "";
+        if (match(Token::PIPE)) {
+            if (check(Token::ID)) { 
+                match(Token::ID); 
+                error_var = previous->text; 
+            }
+            expect(Token::PIPE, "Se esperaba '|' de cierre en catch");  // ← falta este expect
+        }
+        Body* catch_body = parseBody();
+        
+        FcallExp* f = new FcallExp();
+        f->nombre = "__catch__";
+        f->argumentos.push_back(e);
+        return f;
+    }
+
+    return e;
 }
 
 // <logic-expr> ::= <compare-expr> { && | || <compare-expr> }*
@@ -785,13 +725,9 @@ Exp* Parser::parsePostfix() {
             // Token .? combinado (el scanner lo produce)
             advance();
             e = new PuntoExp(e, "__unwrap__");
-        } else if (match(Token::OR)) {
-            // orelse (el scanner mapea orelse → OR)
-            // Detectamos si el previous fue "orelse" revisando el texto
-            // Como OR y && comparten token, verificamos el texto anterior
-            // En este punto previous->text == "orelse" si vino de esa rama del scanner
+        }  else if (check(Token::OR) && current->text == "orelse") {
+            match(Token::OR);
             Exp* fallback = parseLogicExp();
-            // Representamos orelse como BinaryExp con op OR
             e = new BinaryExp(e, fallback, OR);
         } else if (match(Token::LPAREN)) {            // Llamada a función: f(args)
             FcallExp* call = new FcallExp();
@@ -895,6 +831,7 @@ Exp* Parser::parsePrimaryExp() {
         // Llamada a función  f(...)  — el postfix lo manejará el nivel superior
         return new IdExp(nombre);
     }
+
 
     throw runtime_error("Error sintáctico: expresión primaria inesperada");
 }

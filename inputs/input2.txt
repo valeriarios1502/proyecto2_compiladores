@@ -1,41 +1,21 @@
 struct Punto {
-    x: i32;
-    y: i32;
+  x : i32;
+  y : i32;
+  z : f64;
 }
 
-var contador: i32 = 0;
-const MAX: i32 = 100;
-
-pub fn suma(a: i32, b: i32) i32 {
-    return a + b;
+struct Nodo {
+  valor : i32;
+  siguiente : *Nodo;
 }
 
-pub fn main() void {
-    var x: i32 = 10;
-    var y: i32 = 20;
-    var resultado: i32 = 0;
+union Forma (Tag) {
+  circulo : f64;
+  rectangulo : i32;
+}
 
-    resultado = suma(x, y);
-    print(resultado);
-
-    if (resultado > 15) then {
-        print(resultado);
-    } else then {
-        print(0);
-    }
-
-    var i: i32 = 0;
-    while (i < 10) {
-        print(i);
-        i = i + 1;
-    }
-
-    for (i = 0; i < 5; i = i + 1) {
-        print(i);
-    }
-
-    var hex: i32 = 0xFF;
-    var bin: i32 = 0b1010;
-    print(hex);
-    print(bin);
+union Color {
+  r : u8;
+  g : u8;
+  b : u8;
 }

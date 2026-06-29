@@ -7,7 +7,6 @@
 #include <ostream>
 #include <vector>
 #include <utility>
-
 using namespace std;
 
 class Visitor;
@@ -433,6 +432,13 @@ public:
     void accept(Visitor* visitor);
     ForStmt(Stmt* asignacion, Exp* condicion, Stmt* incremento, Body* cuerpo);
     ~ForStmt();
+};
+
+struct DerefAssignStmt : Stmt {
+    Exp* lval;
+    Exp* rval;
+    DerefAssignStmt(Exp* l, Exp* r) : lval(l), rval(r) {}
+    void accept(Visitor* v) override; 
 };
 
 // ==================== Top_dec ====================

@@ -1,0 +1,7 @@
+var opt  : ?i32      = null;
+var ptr  : *f64      = undefined;
+var arr  : [8]i32    = undefined;
+var mat  : [4][4]f64 = undefined;
+var err  : !i32      = undefined;
+var merr : MyError!i32 = undefined;
+var popt : ?*i32     = null;

@@ -1,0 +1,13 @@
+pub fn clasifica (n : i32) void {
+  switch (n) {
+    1 => {
+      print("uno");
+    },
+    2 => {
+      print("dos");
+    },
+    else => {
+      print("otro");
+    },
+  }
+}

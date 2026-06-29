@@ -1,0 +1,9 @@
+comptime {
+  var X = 10 * 10;
+  print(X);
+}
+
+pub fn ejemplo (comptime N : i32) i32 {
+  var suma = comptime N * 2;
+  return suma;
+}

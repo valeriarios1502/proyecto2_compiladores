@@ -1,0 +1,56 @@
+struct Lista {
+  datos : [100]i32;
+  tam   : i32;
+}
+
+const LIMITE : i32 = 100;
+
+fn clamp < type < T > > (v : T, lo : T, hi : T) : T {
+  if (v < lo) then {
+    return lo;
+  } else then {
+    if (v > hi) then {
+      return hi;
+    } else then {
+      return v;
+    }
+  }
+}
+
+pub fn buscarEn (lista : Lista, objetivo : i32) ?i32 {
+  var i = 0;
+  while (i < lista.tam) {
+    var elem = lista.datos[i];
+    if (elem == objetivo) then {
+      return elem;
+    }
+    i = i + 1;
+  }
+  return null;
+}
+
+pub fn main () void {
+  var lista = new Lista;
+  lista.tam = 5;
+  lista.datos[0] = 10;
+
+  var encontrado : ?i32 = buscarEn(lista, 10);
+  var valor = encontrado orelse -1;
+
+  switch (valor) {
+    10 => {
+      print("encontrado");
+    },
+    else => {
+      print("no encontrado");
+    },
+  }
+
+  for (lista.datos) |elem, idx| {
+    var c = clamp(elem, 5, 50);
+    print(c);
+  }
+
+  defer free lista;
+  return;
+}

@@ -82,7 +82,7 @@ public:
     virtual Value visit(AlgoconcorchetesylistaExp* exp)= 0;
     virtual Value visit(AlgoconcorchetesExp* exp)      = 0;
     virtual Value visit(PuntoExp* exp)                 = 0;
-    virtual Value visit(LambdaExp* exp)                = 0;
+    virtual Value visit(LambdaExp* exp)                = 0; 
 
     // Statements → retornan void
     virtual void visit(IfStmt* stm)      = 0;
@@ -98,6 +98,7 @@ public:
     virtual void visit(TryStmt* stm)     = 0;
     virtual void visit(DeferStmt* stm)   = 0;
     virtual void visit(ForStmt* stm)     = 0;
+    virtual void visit(DerefAssignStmt* e) = 0; 
 
     // Declaraciones → retornan void
     virtual void visit(Fundec* fd)    = 0;
@@ -138,6 +139,8 @@ public:
     // ── Entorno de variables: nombre → slot (1-based) ──
     //   slot N  →  -N*8(%rbp)
     std::unordered_map<std::string, int> posicion;
+
+    unordered_map<string, int> errorCodes;
 
     // Próximo slot libre en el frame local (empieza en 1)
     int varContador = 1;
@@ -227,6 +230,7 @@ public:
     void visit(TryStmt* stm)     override;
     void visit(DeferStmt* stm)   override;
     void visit(ForStmt* stm)     override;
+    void visit(DerefAssignStmt* stm)     override;
 
     // Declaraciones
     void visit(Fundec* fd)    override;

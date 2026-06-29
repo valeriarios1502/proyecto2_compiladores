@@ -1,0 +1,22 @@
+pub fn saludar () void {
+  print("hola");
+}
+
+pub fn sumar (a : i32, b : i32) i32 {
+  return a + b;
+}
+
+pub fn identidad (comptime T : type, v : T) T {
+  return v;
+}
+
+pub fn buscar (arr : [10]i32, n : i32) ?i32 {
+  var i = 0;
+  while (i < n) {
+    if (arr[i] == n) then {
+      return arr[i];
+    }
+    i = i + 1;
+  }
+  return null;
+}

@@ -1,0 +1,32 @@
+pub fn control () void {
+  var i = 0;
+
+  if (i == 0) then {
+    print("cero");
+  } else then {
+    print("no cero");
+  }
+
+  while (i < 10) {
+    if (i == 5) then {
+      break;
+    }
+    i = i + 1;
+  }
+
+  for (arr) |elem| {
+    print(elem);
+  }
+
+  for (arr) |elem, idx| {
+    print(idx);
+    print(elem);
+  }
+
+  defer print("saliendo");
+
+  var p = new i32;
+  free p;
+
+  return;
+}

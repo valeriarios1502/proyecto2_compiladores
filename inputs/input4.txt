@@ -1,0 +1,13 @@
+fn maximo < type < T > > (a : T, b : T) : T {
+  if (a > b) then {
+    return a;
+  } else then {
+    return b;
+  }
+}
+
+fn swap < type < T > > (a : *T, b : *T) : void {
+  var tmp : T = *a;
+  *a = *b;
+  *b = tmp;
+}

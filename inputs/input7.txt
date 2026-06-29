@@ -1,0 +1,24 @@
+pub fn exprs () i32 {
+  var a = 1 + 2 * 3 - 4 / 2 % 3;
+  var b = !true && false || true;
+  var c = a == 1 || a != 2 && a < 5;
+  var d = -a;
+  var e = &a;
+  var f = *e;
+
+  var obj = new Punto;
+  var campo = obj.x;
+  var idx   = arr[0];
+
+  var maybe : ?i32 = null;
+  var val = maybe orelse 0;
+  var unwrapped = maybe.?;
+
+  var r = try buscar(arr, 3);
+
+  var lam = fn (x : i32) : i32 {
+    return x + 1;
+  };
+
+  return sumar(a, d);
+}

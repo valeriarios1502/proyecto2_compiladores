@@ -236,6 +236,10 @@ ForStmt::~ForStmt() {
 }
 void ForStmt::accept(Visitor* visitor) { visitor->visit(this); }
 
+void DerefAssignStmt::accept(Visitor* v) {
+    v->visit(this);
+}
+
 // ==================== Top_dec ====================
 
 Top_dec::~Top_dec() {}
