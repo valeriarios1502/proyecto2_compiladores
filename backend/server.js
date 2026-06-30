@@ -1,9 +1,15 @@
 const express = require("express")
 const cors = require("cors")
-const fs = require("fs/promises")
-const path = require("path")
-const os = require("os")
-const { execFile } = require("child_process")
+
+const { runCompiler } = require("./compiler/compiler-runner")
+const {
+  buildCompileResult,
+  calculateStats,
+  normalizeSourceCode,
+} = require("./compiler/compile-result")
+const { buildAst } = require("./compiler/ast-builder")
+const { buildOptimizationDetails } = require("./compiler/optimization-details")
+const { tokenize } = require("./compiler/tokenizer")
 
 const app = express()
 
@@ -11,56 +17,63 @@ app.use(cors())
 app.use(express.json())
 
 app.post("/compile", async (req, res) => {
-  const sourceCode = req.body.sourceCode || ""
+  const sourceCode = normalizeSourceCode(req.body.sourceCode)
+  const scanResult = tokenize(sourceCode)
+  const stats = calculateStats(sourceCode, scanResult.tokens)
+  const ast = scanResult.success ? buildAst(scanResult.tokens) : null
 
   if (!sourceCode.trim()) {
-    return res.json({
-      success: false,
-      errors: ["No se proporcionó código fuente."],
-    })
+    return res.json(buildCompileResult({
+      tokens: scanResult.tokens,
+      errors: ["No se proporciono codigo fuente."],
+      scannerStatus: "Error",
+      scannerSuccess: false,
+      stats,
+    }))
   }
 
-  const tempFile = path.join(os.tmpdir(), `input-${Date.now()}.txt`)
+  if (!scanResult.success) {
+    return res.json(buildCompileResult({
+      tokens: scanResult.tokens,
+      errors: scanResult.errors,
+      scannerStatus: "Error",
+      scannerSuccess: false,
+      stats,
+    }))
+  }
 
   try {
-    await fs.writeFile(tempFile, sourceCode, "utf8")
+    const compilerResult = await runCompiler(sourceCode)
+    const optimizationDetails = buildOptimizationDetails(compilerResult)
 
-    const compilerPath = path.join(__dirname, "..", "Proyecto2.exe")
-
-    execFile(compilerPath, [tempFile], { timeout: 5000 }, (error, stdout, stderr) => {
-      res.json({
-        success: !error && !stderr,
-        tokens: [],
-        parseStatus: error || stderr ? "Error" : "Correcto",
-        parseSuccess: !error && !stderr,
-        optimizations: {
-          constantFolding: false,
-          cascada: false,
-          sethiUllman: false,
-          peephole: false,
-        },
-        optimizationDetails: [],
-        assembly: stdout || "",
-        optimizedAssembly: stdout || "",
-        ast: null,
-        errors: error || stderr ? [stderr || error.message] : [],
-        scannerStatus: error || stderr ? "Error" : "Correcto",
-        scannerSuccess: !error && !stderr,
-        stats: {
-          tokenCount: 0,
-          lineCount: sourceCode.split("\n").length,
-          functionCount: 0,
-        },
-      })
-    })
+    return res.json(buildCompileResult({
+      ...compilerResult,
+      tokens: scanResult.tokens,
+      optimizations: {
+        constantFolding: compilerResult.success,
+        cascada: compilerResult.success,
+        sethiUllman: compilerResult.success,
+        peephole: compilerResult.success,
+      },
+      optimizationDetails,
+      ast: compilerResult.success ? ast : null,
+      scannerStatus: "Correcto",
+      scannerSuccess: true,
+      stats,
+    }))
   } catch (err) {
-    res.status(500).json({
-      success: false,
+    return res.status(500).json(buildCompileResult({
+      tokens: scanResult.tokens,
       errors: [err.message],
-    })
+      scannerStatus: scanResult.success ? "Correcto" : "Error",
+      scannerSuccess: scanResult.success,
+      stats,
+    }))
   }
 })
 
-app.listen(3001, () => {
-  console.log("Backend del compilador corriendo en http://localhost:3001")
+const port = process.env.PORT || 3001
+
+app.listen(port, () => {
+  console.log(`Backend del compilador corriendo en http://localhost:${port}`)
 })
