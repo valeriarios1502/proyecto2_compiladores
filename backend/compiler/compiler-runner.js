@@ -4,24 +4,26 @@ const os = require("os")
 const { execFile } = require("child_process")
 
 async function findCompilerPath() {
-  const candidates = [
-    path.join(__dirname, "..", "..", "Proyecto2-win.exe"),
-    path.join(__dirname, "..", "..", "Proyecto2.exe"),
-    path.join(__dirname, "..", "..", "Proyecto2"),
-    path.join(__dirname, "..", "..", "build", "Proyecto2.exe"),
-    path.join(__dirname, "..", "..", "build", "Proyecto2"),
-  ]
+  const candidates =
+    process.platform === "win32"
+      ? [
+          path.join(__dirname, "..", "..", "Proyecto2-win.exe"),
+          path.join(__dirname, "..", "..", "Proyecto2.exe"),
+          path.join(__dirname, "..", "..", "build", "Proyecto2.exe"),
+        ]
+      : [
+          path.join(__dirname, "..", "..", "build", "Proyecto2"),
+          path.join(__dirname, "..", "..", "Proyecto2"),
+        ];
 
   for (const candidate of candidates) {
     try {
-      await fs.access(candidate)
-      return candidate
-    } catch {
-      // Try the next common build output path.
-    }
+      await fs.access(candidate);
+      return candidate;
+    } catch {}
   }
 
-  throw new Error("No se encontro el ejecutable del compilador.")
+  throw new Error("No se encontro el ejecutable del compilador.");
 }
 
 function parseCompilerOutput(stdout) {
