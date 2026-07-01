@@ -70,9 +70,15 @@ int main(int argc, const char* argv[]) {
         Peephole ph;
         vector<string> optimized = ph.optimize(lines);
 
-        // Emitir assembly final
+        // Emitir ambas versiones para que el backend pueda separarlas.
+        cout << "__ASSEMBLY_UNOPTIMIZED_BEGIN__\n";
+        cout << buffer.str();
+        cout << "__ASSEMBLY_UNOPTIMIZED_END__\n";
+
+        cout << "__ASSEMBLY_OPTIMIZED_BEGIN__\n";
         for (const string& l : optimized)
             cout << l << "\n";
+        cout << "__ASSEMBLY_OPTIMIZED_END__\n";
     }
     catch (const exception& e) {
         cerr << "Error al parsear: " << e.what() << endl;

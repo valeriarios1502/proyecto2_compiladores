@@ -29,13 +29,30 @@ async function findCompilerPath() {
 function parseCompilerOutput(stdout) {
   const lines = stdout.replace(/\r\n/g, "\n").split("\n")
   const parseSuccess = lines[0]?.trim() === "Parseo exitoso"
-  const assembly = parseSuccess ? lines.slice(1).join("\n").trimStart() : stdout
+  const output = parseSuccess ? lines.slice(1).join("\n").trimStart() : stdout
+  const assembly = extractSection(output, "UNOPTIMIZED") || output
+  const optimizedAssembly = extractSection(output, "OPTIMIZED") || assembly
 
   return {
     parseSuccess,
     parseStatus: parseSuccess ? "Correcto" : "Error",
     assembly,
+    optimizedAssembly,
   }
+}
+
+function extractSection(output, name) {
+  const startMarker = `__ASSEMBLY_${name}_BEGIN__`
+  const endMarker = `__ASSEMBLY_${name}_END__`
+  const start = output.indexOf(startMarker)
+  const end = output.indexOf(endMarker)
+
+  if (start === -1 || end === -1 || end < start) return ""
+
+  return output
+    .slice(start + startMarker.length, end)
+    .replace(/^\n/, "")
+    .replace(/\n$/, "")
 }
 
 async function runCompiler(sourceCode) {
@@ -51,13 +68,14 @@ async function runCompiler(sourceCode) {
         const parsedOutput = parseCompilerOutput(stdout || "")
         const success = !error && !stderr && parsedOutput.parseSuccess
         const assembly = success ? parsedOutput.assembly : ""
+        const optimizedAssembly = success ? parsedOutput.optimizedAssembly : ""
 
         resolve({
           success,
           parseStatus: success ? "Correcto" : "Error",
           parseSuccess: success,
           assembly,
-          optimizedAssembly: assembly,
+          optimizedAssembly,
           errors: compilerErrors,
         })
       })
