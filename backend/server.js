@@ -44,17 +44,13 @@ app.post("/compile", async (req, res) => {
 
   try {
     const compilerResult = await runCompiler(sourceCode)
-    const optimizationDetails = buildOptimizationDetails(compilerResult)
+    const optimizationDetails = buildOptimizationDetails(compilerResult, sourceCode)
+    const optimizations = buildOptimizationFlags(optimizationDetails)
 
     return res.json(buildCompileResult({
       ...compilerResult,
       tokens: scanResult.tokens,
-      optimizations: {
-        constantFolding: compilerResult.success,
-        cascada: compilerResult.success,
-        sethiUllman: compilerResult.success,
-        peephole: compilerResult.success,
-      },
+      optimizations,
       optimizationDetails,
       ast: compilerResult.success ? ast : null,
       scannerStatus: "Correcto",
@@ -71,6 +67,19 @@ app.post("/compile", async (req, res) => {
     }))
   }
 })
+
+function buildOptimizationFlags(details) {
+  return {
+    constantFolding: isApplied(details, "constantFolding"),
+    cascada: isApplied(details, "cascada"),
+    sethiUllman: isApplied(details, "sethiUllman"),
+    peephole: isApplied(details, "peephole"),
+  }
+}
+
+function isApplied(details, pass) {
+  return details.some((detail) => detail.pass === pass && detail.status === "Aplicado")
+}
 
 const port = process.env.PORT || 3001
 
